@@ -1,0 +1,32 @@
+# 依赖
+node_modules/
+server/node_modules/
+web/node_modules/
+
+# 环境变量（含 API Key，部署时参考 .env.example）
+server/.env
+.env
+.env.local
+.env.*.local
+
+# 构建产物
+dist/
+build/
+server/dist/
+web/dist/
+
+# 日志
+*.log
+logs/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Trae 临时文件
+.trae-html-share-packages/
