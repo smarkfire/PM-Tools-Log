@@ -15,9 +15,9 @@ build/
 server/dist/
 web/dist/
 
-# 日志
+# 日志（/logs/ 仅匹配仓库根目录，避免忽略 web/src/views/logs 源码目录）
 *.log
-logs/
+/logs/
 
 # 系统文件
 .DS_Store
