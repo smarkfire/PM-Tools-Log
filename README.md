@@ -158,3 +158,30 @@ psql -h localhost -U logadmin -d logdb -f server/sql/02_seed_demo.sql
 - 桌面端：固定侧边栏（可折叠）+ 顶部栏
 - 移动端：抽屉式侧边栏 + 精简表格（列表卡片化）+ 全宽表单 + 精简分页器
 - 栅格：统计卡片/项目卡片使用 Element Plus 响应式栅格（xs/sm/md/lg）
+
+## 版权与授权协议
+
+本项目采用 **非商业使用授权模式**（参照 [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0/) 精神，完整条款见仓库根目录 [LICENSE](LICENSE) 文件）：
+
+### ✅ 允许（免费）
+
+- 个人学习、研究、教学使用
+- 阅读和分析源码，用于技术学习
+- 修改后自用于非商业目的
+- 在非商业项目中部署使用
+
+### ❌ 需要商业授权（收费）
+
+- 将本系统（含修改版本）用于企业内部商业运营
+- 基于本系统二次开发后销售、SaaS 化运营
+- 其他任何以营利为目的的使用
+
+### 商业授权联系
+
+如需商业授权，请联系作者：
+
+- **微信：aichuandao**
+
+---
+
+> 注意：本协议为“源码可用（Source Available）”授权，不属于 OSI 定义的严格开源协议。个人与非商业使用免费，商业使用需获得作者书面授权许可。
