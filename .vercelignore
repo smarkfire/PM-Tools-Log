@@ -1,0 +1,13 @@
+# 本地敏感文件（密钥不入部署快照）
+server/.env
+.env
+.env.local
+
+# 沙箱/本地杂项（/logs/ 仅匹配仓库根目录的 logs，不影响 web/src/views/logs）
+.trae-html-share-packages/
+*.log
+/logs/
+
+# Git
+.git
+.gitignore
