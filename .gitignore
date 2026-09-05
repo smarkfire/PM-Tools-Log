@@ -30,3 +30,5 @@ Thumbs.db
 
 # Trae 临时文件
 .trae-html-share-packages/
+.vercel
+.env*
