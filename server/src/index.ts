@@ -1,52 +1,34 @@
 /**
  * 应用入口
+ * - 本地开发：初始化数据库并监听端口
+ * - Vercel Serverless：仅导出 app（实际入口为根目录 api/index.ts）
  */
-import express from 'express';
-import cors from 'cors';
+import app from './app';
 import { env } from './config/env';
-import router from './routes';
-import { errorHandler } from './middleware/errorHandler';
 import { pool } from './config/db';
 import initDb from './scripts/initDb';
 
-const app = express();
+if (!env.isServerless) {
+  async function main() {
+    // 启动时确保表结构存在
+    await initDb();
 
-app.use(cors());
-app.use(express.json({ limit: '2mb' }));
+    app.listen(env.port, () => {
+      console.log(`[Server] 日志管理系统后端已启动: http://localhost:${env.port}`);
+      console.log(`[Server] 数据库: ${env.db.host}:${env.db.port}/${env.db.database}`);
+    });
+  }
 
-// 健康检查
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', time: new Date().toISOString() });
-});
+  // 优雅退出
+  process.on('SIGINT', async () => {
+    await pool.end();
+    process.exit(0);
+  });
 
-// 业务路由
-app.use('/api', router);
-
-// 404
-app.use((_req, res) => {
-  res.status(404).json({ code: 404, message: '接口不存在' });
-});
-
-// 错误处理
-app.use(errorHandler);
-
-async function main() {
-  // 启动时确保表结构存在
-  await initDb();
-
-  app.listen(env.port, () => {
-    console.log(`[Server] 日志管理系统后端已启动: http://localhost:${env.port}`);
-    console.log(`[Server] 数据库: ${env.db.host}:${env.db.port}/${env.db.database}`);
+  main().catch((err) => {
+    console.error('启动失败:', err);
+    process.exit(1);
   });
 }
 
-// 优雅退出
-process.on('SIGINT', async () => {
-  await pool.end();
-  process.exit(0);
-});
-
-main().catch((err) => {
-  console.error('启动失败:', err);
-  process.exit(1);
-});
+export default app;

@@ -114,6 +114,44 @@ psql -h localhost -U logadmin -d logdb -f server/sql/02_seed_demo.sql
 5. 个人在【报告中心】生成自己的周报/月报；项目经理/总监生成项目周报/月报
 6. 【AI 助手】中基于自己权限范围内的日志数据智能问答
 
+## 部署到 Vercel（Supabase 数据库）
+
+本项目已适配 Vercel Serverless 部署：前端静态资源 + 后端 Express 单函数（`api/index.ts`），数据库连接 Supabase。
+
+### 1. Supabase 数据库准备
+
+> ⚠️ **重要**：Supabase 直连地址 `db.xxx.supabase.co` 仅支持 IPv6，而 Vercel 函数默认只支持 IPv4 出站，**必须使用 Supabase 的连接池（Pooler）地址**。在 Supabase 控制台点击「Connect → Connection Pooling」即可看到，形如：
+
+```
+postgresql://postgres.<项目ref>:<密码>@aws-0-<区域>.pooler.supabase.com:5432/postgres
+```
+
+### 2. Vercel 项目配置
+
+导入 GitHub 仓库创建项目（Root Directory 保持仓库根目录），在 **Settings → Environment Variables** 配置：
+
+| 环境变量 | 说明 |
+|----------|------|
+| `DATABASE_URL` | 上面的 Supabase Pooler 连接串（自动启用 SSL） |
+| `JWT_SECRET` | JWT 签名密钥（随机长字符串） |
+| `SETUP_KEY` | 远程初始化数据库的密钥（自定义随机字符串） |
+| `AI_TIMEOUT_MS` | AI 请求超时，建议 `55000`（需小于函数 maxDuration 60s） |
+| `QWEN_API_KEY` / `DEEPSEEK_API_KEY` | 可选，系统默认 AI Key（也可部署后在系统设置中配置） |
+
+### 3. 初始化数据库（幂等，部署完成后执行一次）
+
+```bash
+curl -X POST https://<你的域名>/api/setup -H "X-Setup-Key: <你的SETUP_KEY>"
+```
+
+成功返回：`数据库初始化完成（表结构与种子数据已就绪）`。之后即可用演示账号登录使用。
+
+### 4. 架构说明
+
+- `api/index.ts`：Vercel Serverless 入口，导出 Express 应用
+- `vercel.json`：`/api/*` 路由到后端函数，其余路径回退到 `index.html`（SPA）
+- `server/src/config/db.ts`：Serverless 小连接池 + 冻结连接自动重试
+
 ## 测试账号（演示数据）
 
 | 账号 | 密码 | 角色 |
@@ -133,14 +171,19 @@ psql -h localhost -U logadmin -d logdb -f server/sql/02_seed_demo.sql
 
 ```
 ├── start.sh                  # 一键启动脚本
+├── api/
+│   └── index.ts              # Vercel Serverless 入口（导出 Express 应用）
+├── vercel.json               # Vercel 部署配置（API 路由 + SPA 回退）
+├── package.json              # 根依赖（供 api/ 函数构建）
 ├── server/                   # 后端
 │   ├── src/
+│   │   ├── app.ts            # Express 应用（与监听分离，供 Serverless 复用）
 │   │   ├── config/           # 数据库连接池、环境变量
 │   │   ├── middleware/       # JWT 认证、asyncHandler、错误处理
 │   │   ├── controllers/      # 认证/用户/项目/日志/报告/提示词/AI对话
 │   │   ├── services/         # 权限服务（RBAC 数据范围）、AI 服务
 │   │   ├── routes/           # 路由注册
-│   │   ├── scripts/initDb.ts # 建表脚本（幂等）
+│   │   ├── scripts/initDb.ts # 建表脚本（幂等，支持远程 /api/setup 触发）
 │   │   └── types/            # 类型定义
 │   └── test-e2e.sh           # 端到端测试脚本
 └── web/                      # 前端

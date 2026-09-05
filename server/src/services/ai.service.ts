@@ -55,7 +55,8 @@ export async function chat(
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 120000); // 2分钟超时
+  // 超时可配置（Serverless 平台如 Vercel 需小于函数 maxDuration）
+  const timeout = setTimeout(() => controller.abort(), env.ai.timeoutMs);
 
   try {
     const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
