@@ -2,6 +2,34 @@
 
 一个面向项目团队的日志管理系统，支持项目管理、项目成员管理、每日工作日志、AI 日志优化（通义千问 / DeepSeek）、个人/项目周报月报生成、自定义提示词与 AI 对话，并实现了完整的四级数据权限控制。
 
+> 在线 Demo：https://pm-tools-log.vercel.app ｜ 源码：https://github.com/smarkfire/PM-Tools-Log
+
+## 界面截图
+
+### 填写日志
+
+支持日历选日期、关联项目、记录工时，右侧可一键 AI 优化（通义千问 / DeepSeek），同时保存原始内容与优化后内容。
+
+![填写日志](docs/screenshots/01-write-log.png)
+
+### 报告中心
+
+AI 基于工作日志自动生成个人 / 项目周报、月报，支持自定义提示词，历史报告可管理查看。
+
+![报告中心](docs/screenshots/02-report-center.png)
+
+### AI 助手
+
+多会话管理，AI 基于用户数据权限范围内的日志回答问题，支持通义千问 / DeepSeek 模型切换。
+
+![AI 助手](docs/screenshots/03-ai-assistant.png)
+
+### 提示词配置
+
+用户可自定义三类提示词（日志优化 / 报告生成 / AI 对话）并设为默认，系统默认提示词只读参考。
+
+![提示词配置](docs/screenshots/04-prompt-config.png)
+
 ## 技术栈
 
 - **前端**：Vue 3 + TypeScript + Vite + Element Plus + Pinia + Vue Router（完整响应式，适配桌面/平板/手机）
@@ -33,38 +61,128 @@
 
 > 一个用户可在不同项目中承担不同角色，数据范围取并集；AI 对话的日志上下文同样受此权限约束。
 
-## 快速开始
+## 部署方式一：本地部署（Linux + PostgreSQL）
+
+适合自建服务器、内网部署、二次开发调试。
 
 ### 1. 环境准备
 
-- Node.js >= 18
-- PostgreSQL >= 14
+| 依赖 | 最低版本 | 说明 |
+|------|----------|------|
+| Node.js | >= 18 | 前后端共用 |
+| PostgreSQL | >= 14 | 数据库 |
+| npm | >= 9 | 随 Node.js 安装 |
 
-### 2. 一键启动（Linux）
+#### 安装 PostgreSQL（以 Ubuntu/Debian 为例）
 
 ```bash
+# 安装 PostgreSQL 16
+sudo sh -c 'echo "deb https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg
+sudo apt update
+sudo apt install -y postgresql-16
+
+# 启动服务
+sudo systemctl enable postgresql
+sudo systemctl start postgresql
+```
+
+#### 安装 Node.js（推荐用 nvm）
+
+```bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+source ~/.bashrc
+nvm install 20
+node -v   # 确认 >= 18
+```
+
+### 2. 一键启动（推荐）
+
+```bash
+git clone https://github.com/smarkfire/PM-Tools-Log.git
+cd PM-Tools-Log
 chmod +x start.sh
 ./start.sh dev
 ```
 
-脚本会自动：启动 PostgreSQL → 创建数据库/用户 → 启动后端（3000 端口）→ 启动前端（5173 端口）。
+脚本会自动完成全部流程：
 
-### 3. 手动启动
+```
+启动 PostgreSQL → 创建数据库/用户 → 后端 npm install → 初始化表结构+演示数据 → 启动后端(:3000) → 前端 npm install → 启动前端(:5173)
+```
+
+启动后访问 http://localhost:5173 即可使用。
+
+### 3. 手动分步部署
+
+如果不使用一键脚本，可按以下步骤操作：
+
+#### 3.1 创建数据库用户与库
 
 ```bash
-# 数据库初始化（创建用户与库）
 sudo -u postgres psql -c "CREATE USER logadmin WITH PASSWORD 'LogAdmin@2026!Db' SUPERUSER;"
 sudo -u postgres psql -c "CREATE DATABASE logdb OWNER logadmin;"
+```
 
-# 后端
+#### 3.2 配置后端环境变量
+
+```bash
+cd server
+cp .env.example .env   # 如果没有 .env.example，手动创建
+```
+
+编辑 `server/.env`：
+
+```env
+# 数据库（本地直连）
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=logadmin
+DB_PASSWORD=LogAdmin@2026!Db
+DB_NAME=logdb
+
+# JWT 密钥（随机长字符串）
+JWT_SECRET=your-random-jwt-secret-here
+
+# AI 配置（可选，也可部署后在系统设置中配置）
+QWEN_API_KEY=
+DEEPSEEK_API_KEY=
+```
+
+#### 3.3 安装依赖并初始化数据库
+
+```bash
 cd server
 npm install
-npm run dev        # 开发模式（表结构自动初始化）
 
-# 前端
+# 初始化数据库（建表 + 演示数据，幂等可重复执行）
+npm run init-db
+```
+
+> 也可以用 SQL 脚本手动建库：
+> ```bash
+> psql -h localhost -U logadmin -d logdb -f server/sql/01_schema.sql
+> psql -h localhost -U logadmin -d logdb -f server/sql/02_seed_demo.sql
+> ```
+> 两个脚本均可重复执行（自动跳过已存在的数据）。
+
+#### 3.4 启动后端
+
+```bash
+cd server
+npm run dev          # 开发模式，热重载，监听 http://localhost:3000
+# 或
+npm run build && npm start   # 生产模式
+```
+
+#### 3.5 启动前端
+
+```bash
 cd web
 npm install
-npm run dev
+npm run dev          # 开发模式，监听 http://localhost:5173
+# 或
+npm run build && npm run preview   # 生产预览
 ```
 
 ### 4. AI 配置（三种方式，按优先级）
@@ -91,19 +209,43 @@ DEEPSEEK_MODEL=deepseek-chat
 
 管理员还可在【系统设置 → 功能菜单开关】中控制各功能菜单是否对用户开放（如关闭"AI 助手"菜单）。
 
-### 5. 使用 SQL 脚本部署（可选）
-
-`server/sql/` 下提供幂等 SQL 脚本，适合生产部署或手动建库：
+### 5. 生产环境部署（PM2 + Nginx）
 
 ```bash
-# 1. 建表结构
-psql -h localhost -U logadmin -d logdb -f server/sql/01_schema.sql
+# 全局安装 PM2
+npm install -g pm2
 
-# 2. 导入演示数据（含 8 个演示账号、2 个项目、2 个小组、近两周日志、系统默认提示词、系统配置）
-psql -h localhost -U logadmin -d logdb -f server/sql/02_seed_demo.sql
+# 构建并启动后端
+cd server && npm install && npm run build
+pm2 start dist/index.js --name log-server
+pm2 save
+
+# 构建前端
+cd web && npm install && npm run build
+# 将 dist/ 部署到 Nginx 静态目录
 ```
 
-两个脚本均可重复执行（自动跳过已存在的数据）。也可以直接运行 `cd server && npm run init-db` 完成初始化。
+Nginx 配置示例：
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    # 前端静态资源
+    location / {
+        root /path/to/web/dist;
+        try_files $uri $uri/ /index.html;
+    }
+
+    # 后端 API 反向代理
+    location /api/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
 
 ### 6. 体验流程
 
@@ -114,9 +256,9 @@ psql -h localhost -U logadmin -d logdb -f server/sql/02_seed_demo.sql
 5. 个人在【报告中心】生成自己的周报/月报；项目经理/总监生成项目周报/月报
 6. 【AI 助手】中基于自己权限范围内的日志数据智能问答
 
-## 部署到 Vercel（Supabase 数据库）
+## 部署方式二：Vercel 部署（Supabase 数据库）
 
-本项目已适配 Vercel Serverless 部署：前端静态资源 + 后端 Express 单函数（`api/index.ts`），数据库连接 Supabase。
+适合零运维、自动扩缩容、push 即部署的场景。本项目已适配 Vercel Serverless 部署：前端静态资源 + 后端 Express 单函数（`api/index.ts`），数据库连接 Supabase。
 
 ### 1. Supabase 数据库准备
 
