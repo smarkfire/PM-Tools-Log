@@ -228,24 +228,24 @@ const CONFIG_SEEDS: { key: string; value: string; desc: string }[] = [
 ];
 
 /**
- * 演示数据：8 个演示账号（密码统一 123456）、2 个项目、2 个小组、
+ * 演示数据：8 个演示账号（密码统一 PmLog@2026!Secure）、2 个项目、2 个小组、
  * 近两周工作日志、张三的自定义提示词。
  * 与 server/sql/02_seed_demo.sql 等价，仅在数据库无任何用户时插入（首次初始化），
  * 避免重复部署时按相对日期滚动新增日志。
  */
 const DEMO_SEED_SQL = `
--- 1. 用户（bcrypt 哈希对应明文密码: 123456）
+-- 1. 用户（bcrypt 哈希对应明文密码: PmLog@2026!Secure）
 INSERT INTO users (username, email, password_hash, display_name, role)
 SELECT v.username, v.email, v.hash, v.display_name, v.role
 FROM (VALUES
-  ('director1', 'director1@demo.com', '$2a$10$RuFKkLMAWxBJKi/94CtM7ewbve3jBTppo1OevPowcZ6tyb6GGbGyW', '项目总监', 'director'),
-  ('pm1',       'pm1@demo.com',       '$2a$10$RuFKkLMAWxBJKi/94CtM7ewbve3jBTppo1OevPowcZ6tyb6GGbGyW', '王经理',   'member'),
-  ('pm2',       'pm2@demo.com',       '$2a$10$RuFKkLMAWxBJKi/94CtM7ewbve3jBTppo1OevPowcZ6tyb6GGbGyW', '陈经理',   'member'),
-  ('leader1',   'leader1@demo.com',   '$2a$10$RuFKkLMAWxBJKi/94CtM7ewbve3jBTppo1OevPowcZ6tyb6GGbGyW', '李组长',   'member'),
-  ('leader2',   'leader2@demo.com',   '$2a$10$RuFKkLMAWxBJKi/94CtM7ewbve3jBTppo1OevPowcZ6tyb6GGbGyW', '周组长',   'member'),
-  ('member1',   'member1@demo.com',   '$2a$10$RuFKkLMAWxBJKi/94CtM7ewbve3jBTppo1OevPowcZ6tyb6GGbGyW', '张三',     'member'),
-  ('member2',   'member2@demo.com',   '$2a$10$RuFKkLMAWxBJKi/94CtM7ewbve3jBTppo1OevPowcZ6tyb6GGbGyW', '赵四',     'member'),
-  ('member3',   'member3@demo.com',   '$2a$10$RuFKkLMAWxBJKi/94CtM7ewbve3jBTppo1OevPowcZ6tyb6GGbGyW', '孙七',     'member')
+  ('director1', 'director1@demo.com', '$2a$10$1BL5GhWamsts6jroKlTMIOkSI8vu5mKZN8EMHGTqhqOAguJCYPWxW', '项目总监', 'director'),
+  ('pm1',       'pm1@demo.com',       '$2a$10$1BL5GhWamsts6jroKlTMIOkSI8vu5mKZN8EMHGTqhqOAguJCYPWxW', '王经理',   'member'),
+  ('pm2',       'pm2@demo.com',       '$2a$10$1BL5GhWamsts6jroKlTMIOkSI8vu5mKZN8EMHGTqhqOAguJCYPWxW', '陈经理',   'member'),
+  ('leader1',   'leader1@demo.com',   '$2a$10$1BL5GhWamsts6jroKlTMIOkSI8vu5mKZN8EMHGTqhqOAguJCYPWxW', '李组长',   'member'),
+  ('leader2',   'leader2@demo.com',   '$2a$10$1BL5GhWamsts6jroKlTMIOkSI8vu5mKZN8EMHGTqhqOAguJCYPWxW', '周组长',   'member'),
+  ('member1',   'member1@demo.com',   '$2a$10$1BL5GhWamsts6jroKlTMIOkSI8vu5mKZN8EMHGTqhqOAguJCYPWxW', '张三',     'member'),
+  ('member2',   'member2@demo.com',   '$2a$10$1BL5GhWamsts6jroKlTMIOkSI8vu5mKZN8EMHGTqhqOAguJCYPWxW', '赵四',     'member'),
+  ('member3',   'member3@demo.com',   '$2a$10$1BL5GhWamsts6jroKlTMIOkSI8vu5mKZN8EMHGTqhqOAguJCYPWxW', '孙七',     'member')
 ) AS v(username, email, hash, display_name, role)
 WHERE NOT EXISTS (SELECT 1 FROM users WHERE users.username = v.username);
 
@@ -401,10 +401,18 @@ async function initDb() {
   const cntRes = await query<{ cnt: number }>('SELECT COUNT(*)::int AS cnt FROM users');
   if (cntRes.rows[0].cnt === 0) {
     await query(DEMO_SEED_SQL);
-    console.log('演示数据已初始化（8 个演示账号，密码 123456）');
+    console.log('演示数据已初始化（8 个演示账号，密码 PmLog@2026!Secure）');
   } else {
     console.log(`数据库已有 ${cntRes.rows[0].cnt} 个用户，跳过演示数据`);
   }
+
+  // 幂等同步演示账号密码（保证部署后密码与代码一致，即使账号已存在）
+  const DEMO_USERNAMES = ['director1', 'pm1', 'pm2', 'leader1', 'leader2', 'member1', 'member2', 'member3'];
+  const syncRes = await query(
+    `UPDATE users SET password_hash = $1::varchar, updated_at = NOW() WHERE username = ANY($2::varchar[])`,
+    ['$2a$10$1BL5GhWamsts6jroKlTMIOkSI8vu5mKZN8EMHGTqhqOAguJCYPWxW', DEMO_USERNAMES]
+  );
+  console.log(`演示账号密码已同步（影响 ${syncRes.rowCount} 行）`);
 
   const res = await query('SELECT COUNT(*)::int AS cnt FROM users');
   console.log(`当前用户数: ${res.rows[0].cnt}`);

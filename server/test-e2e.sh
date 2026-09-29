@@ -22,21 +22,21 @@ check_or_exists() { # 注册幂等检查：成功或已注册均视为通过（$
 }
 
 echo "=== 1. 注册用户 ==="
-R=$(curl -s --noproxy '*' -X POST $BASE/auth/register -H 'Content-Type: application/json' -d '{"username":"pm1","email":"pm1@test.com","password":"123456","displayName":"王经理"}')
+R=$(curl -s --noproxy '*' -X POST $BASE/auth/register -H 'Content-Type: application/json' -d '{"username":"pm1","email":"pm1@test.com","password":"PmLog@2026!Secure","displayName":"王经理"}')
 check_or_exists "注册 pm1" "$R"
-R=$(curl -s --noproxy '*' -X POST $BASE/auth/register -H 'Content-Type: application/json' -d '{"username":"leader1","email":"leader1@test.com","password":"123456","displayName":"李组长"}')
+R=$(curl -s --noproxy '*' -X POST $BASE/auth/register -H 'Content-Type: application/json' -d '{"username":"leader1","email":"leader1@test.com","password":"PmLog@2026!Secure","displayName":"李组长"}')
 check_or_exists "注册 leader1" "$R"
-R=$(curl -s --noproxy '*' -X POST $BASE/auth/register -H 'Content-Type: application/json' -d '{"username":"member1","email":"member1@test.com","password":"123456","displayName":"张三"}')
+R=$(curl -s --noproxy '*' -X POST $BASE/auth/register -H 'Content-Type: application/json' -d '{"username":"member1","email":"member1@test.com","password":"PmLog@2026!Secure","displayName":"张三"}')
 check_or_exists "注册 member1" "$R"
-R=$(curl -s --noproxy '*' -X POST $BASE/auth/register -H 'Content-Type: application/json' -d '{"username":"member2","email":"member2@test.com","password":"123456","displayName":"赵四"}')
+R=$(curl -s --noproxy '*' -X POST $BASE/auth/register -H 'Content-Type: application/json' -d '{"username":"member2","email":"member2@test.com","password":"PmLog@2026!Secure","displayName":"赵四"}')
 check_or_exists "注册 member2" "$R"
 
 echo "=== 2. 登录获取 token ==="
-DIR_TOKEN=$(curl -s --noproxy '*' -X POST $BASE/auth/login -H 'Content-Type: application/json' -d '{"username":"director1","password":"123456"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
-PM_TOKEN=$(curl -s --noproxy '*' -X POST $BASE/auth/login -H 'Content-Type: application/json' -d '{"username":"pm1","password":"123456"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
-LEADER_TOKEN=$(curl -s --noproxy '*' -X POST $BASE/auth/login -H 'Content-Type: application/json' -d '{"username":"leader1","password":"123456"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
-MEMBER1_TOKEN=$(curl -s --noproxy '*' -X POST $BASE/auth/login -H 'Content-Type: application/json' -d '{"username":"member1","password":"123456"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
-MEMBER2_TOKEN=$(curl -s --noproxy '*' -X POST $BASE/auth/login -H 'Content-Type: application/json' -d '{"username":"member2","password":"123456"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+DIR_TOKEN=$(curl -s --noproxy '*' -X POST $BASE/auth/login -H 'Content-Type: application/json' -d '{"username":"director1","password":"PmLog@2026!Secure"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+PM_TOKEN=$(curl -s --noproxy '*' -X POST $BASE/auth/login -H 'Content-Type: application/json' -d '{"username":"pm1","password":"PmLog@2026!Secure"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+LEADER_TOKEN=$(curl -s --noproxy '*' -X POST $BASE/auth/login -H 'Content-Type: application/json' -d '{"username":"leader1","password":"PmLog@2026!Secure"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+MEMBER1_TOKEN=$(curl -s --noproxy '*' -X POST $BASE/auth/login -H 'Content-Type: application/json' -d '{"username":"member1","password":"PmLog@2026!Secure"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+MEMBER2_TOKEN=$(curl -s --noproxy '*' -X POST $BASE/auth/login -H 'Content-Type: application/json' -d '{"username":"member2","password":"PmLog@2026!Secure"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
 check "总监登录" "eyJ" "$DIR_TOKEN"
 check "pm1 登录" "eyJ" "$PM_TOKEN"
 check "leader1 登录" "eyJ" "$LEADER_TOKEN"

@@ -27,7 +27,7 @@ if [ "$VERCEL_ENV" = "production" ] && [ -n "$DATABASE_URL" ]; then
   echo "[smoke] POST $SMOKE_URL/api/auth/login (director1)"
   curl -sS --max-time 60 -X POST "$SMOKE_URL/api/auth/login" \
     -H "Content-Type: application/json" \
-    -d '{"username":"director1","password":"123456"}' | head -c 500 || echo "[smoke] 登录测试失败（忽略）"
+    -d '{"username":"director1","password":"PmLog@2026!Secure"}' | head -c 500 || echo "[smoke] 登录测试失败（忽略）"
   echo ""
 else
   echo "[build] 非生产环境或未配置数据库，跳过冒烟测试"

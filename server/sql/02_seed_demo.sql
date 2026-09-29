@@ -1,34 +1,34 @@
 -- ============================================================
 -- 日志管理系统 - 演示数据
 -- 数据库: PostgreSQL 12+
--- 说明: 幂等脚本，可重复执行；所有演示账号密码统一为 123456
+-- 说明: 幂等脚本，可重复执行；所有演示账号密码统一为 PmLog@2026!Secure
 --
 -- 演示账号一览：
---   director1 / 123456  项目总监（查看所有数据）
---   pm1       / 123456  王经理（"智慧园区平台"项目经理）
---   pm2       / 123456  陈经理（"大模型项目"项目经理）
---   leader1   / 123456  李组长（"智慧园区平台"前端组组长）
---   leader2   / 123456  周组长（"智慧园区平台"后端组组长）
---   member1   / 123456  张三（前端组组员）
---   member2   / 123456  赵四（前端组组员）
---   member3   / 123456  孙七（后端组组员）
+--   director1 / PmLog@2026!Secure  项目总监（查看所有数据）
+--   pm1       / PmLog@2026!Secure  王经理（"智慧园区平台"项目经理）
+--   pm2       / PmLog@2026!Secure  陈经理（"大模型项目"项目经理）
+--   leader1   / PmLog@2026!Secure  李组长（"智慧园区平台"前端组组长）
+--   leader2   / PmLog@2026!Secure  周组长（"智慧园区平台"后端组组长）
+--   member1   / PmLog@2026!Secure  张三（前端组组员）
+--   member2   / PmLog@2026!Secure  赵四（前端组组员）
+--   member3   / PmLog@2026!Secure  孙七（后端组组员）
 -- ============================================================
 
--- bcrypt 哈希对应的明文密码: 123456
--- $2a$10$RuFKkLMAWxBJKi/94CtM7ewbve3jBTppo1OevPowcZ6tyb6GGbGyW
+-- bcrypt 哈希对应的明文密码: PmLog@2026!Secure
+-- $2a$10$1BL5GhWamsts6jroKlTMIOkSI8vu5mKZN8EMHGTqhqOAguJCYPWxW
 
 -- ---------- 1. 用户 ----------
 INSERT INTO users (username, email, password_hash, display_name, role)
 SELECT v.username, v.email, v.hash, v.display_name, v.role
 FROM (VALUES
-  ('director1', 'director1@demo.com', '$2a$10$RuFKkLMAWxBJKi/94CtM7ewbve3jBTppo1OevPowcZ6tyb6GGbGyW', '项目总监', 'director'),
-  ('pm1',       'pm1@demo.com',       '$2a$10$RuFKkLMAWxBJKi/94CtM7ewbve3jBTppo1OevPowcZ6tyb6GGbGyW', '王经理',   'member'),
-  ('pm2',       'pm2@demo.com',       '$2a$10$RuFKkLMAWxBJKi/94CtM7ewbve3jBTppo1OevPowcZ6tyb6GGbGyW', '陈经理',   'member'),
-  ('leader1',   'leader1@demo.com',   '$2a$10$RuFKkLMAWxBJKi/94CtM7ewbve3jBTppo1OevPowcZ6tyb6GGbGyW', '李组长',   'member'),
-  ('leader2',   'leader2@demo.com',   '$2a$10$RuFKkLMAWxBJKi/94CtM7ewbve3jBTppo1OevPowcZ6tyb6GGbGyW', '周组长',   'member'),
-  ('member1',   'member1@demo.com',   '$2a$10$RuFKkLMAWxBJKi/94CtM7ewbve3jBTppo1OevPowcZ6tyb6GGbGyW', '张三',     'member'),
-  ('member2',   'member2@demo.com',   '$2a$10$RuFKkLMAWxBJKi/94CtM7ewbve3jBTppo1OevPowcZ6tyb6GGbGyW', '赵四',     'member'),
-  ('member3',   'member3@demo.com',   '$2a$10$RuFKkLMAWxBJKi/94CtM7ewbve3jBTppo1OevPowcZ6tyb6GGbGyW', '孙七',     'member')
+  ('director1', 'director1@demo.com', '$2a$10$1BL5GhWamsts6jroKlTMIOkSI8vu5mKZN8EMHGTqhqOAguJCYPWxW', '项目总监', 'director'),
+  ('pm1',       'pm1@demo.com',       '$2a$10$1BL5GhWamsts6jroKlTMIOkSI8vu5mKZN8EMHGTqhqOAguJCYPWxW', '王经理',   'member'),
+  ('pm2',       'pm2@demo.com',       '$2a$10$1BL5GhWamsts6jroKlTMIOkSI8vu5mKZN8EMHGTqhqOAguJCYPWxW', '陈经理',   'member'),
+  ('leader1',   'leader1@demo.com',   '$2a$10$1BL5GhWamsts6jroKlTMIOkSI8vu5mKZN8EMHGTqhqOAguJCYPWxW', '李组长',   'member'),
+  ('leader2',   'leader2@demo.com',   '$2a$10$1BL5GhWamsts6jroKlTMIOkSI8vu5mKZN8EMHGTqhqOAguJCYPWxW', '周组长',   'member'),
+  ('member1',   'member1@demo.com',   '$2a$10$1BL5GhWamsts6jroKlTMIOkSI8vu5mKZN8EMHGTqhqOAguJCYPWxW', '张三',     'member'),
+  ('member2',   'member2@demo.com',   '$2a$10$1BL5GhWamsts6jroKlTMIOkSI8vu5mKZN8EMHGTqhqOAguJCYPWxW', '赵四',     'member'),
+  ('member3',   'member3@demo.com',   '$2a$10$1BL5GhWamsts6jroKlTMIOkSI8vu5mKZN8EMHGTqhqOAguJCYPWxW', '孙七',     'member')
 ) AS v(username, email, hash, display_name, role)
 WHERE NOT EXISTS (SELECT 1 FROM users WHERE users.username = v.username);
 

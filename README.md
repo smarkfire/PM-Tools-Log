@@ -156,14 +156,14 @@ curl -X POST https://<你的域名>/api/setup -H "X-Setup-Key: <你的SETUP_KEY>
 
 | 账号 | 密码 | 角色 |
 |------|------|------|
-| director1 | 123456 | 项目总监 |
-| pm1 | 123456 | 项目经理（智慧园区平台） |
-| pm2 | 123456 | 项目经理（大模型项目） |
-| leader1 | 123456 | 小组长（前端组） |
-| leader2 | 123456 | 小组长（后端组） |
-| member1 | 123456 | 组员（前端组，有自定义默认提示词） |
-| member2 | 123456 | 组员（前端组） |
-| member3 | 123456 | 组员（后端组） |
+| director1 | PmLog@2026!Secure | 项目总监 |
+| pm1 | PmLog@2026!Secure | 项目经理（智慧园区平台） |
+| pm2 | PmLog@2026!Secure | 项目经理（大模型项目） |
+| leader1 | PmLog@2026!Secure | 小组长（前端组） |
+| leader2 | PmLog@2026!Secure | 小组长（后端组） |
+| member1 | PmLog@2026!Secure | 组员（前端组，有自定义默认提示词） |
+| member2 | PmLog@2026!Secure | 组员（前端组） |
+| member3 | PmLog@2026!Secure | 组员（后端组） |
 
 运行 `server/test-e2e.sh` 可执行完整的端到端业务与数据权限测试（33 项断言）。
 
