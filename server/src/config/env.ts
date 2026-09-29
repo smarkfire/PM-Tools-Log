@@ -31,7 +31,7 @@ export const env = {
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT || '5432', 10),
     user: process.env.DB_USER || 'logadmin',
-    password: process.env.DB_PASSWORD || 'logadmin123',
+    password: process.env.DB_PASSWORD || 'LogAdmin@2026!Db',
     database: process.env.DB_NAME || 'logdb',
   },
   jwt: {

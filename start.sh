@@ -23,7 +23,7 @@ fi
 # 2. 初始化数据库（幂等）
 if ! su - postgres -c "psql -tAc \"SELECT 1 FROM pg_database WHERE dbname='logdb'\"" | grep -q 1; then
   echo "[2/4] 创建数据库..."
-  su - postgres -c "psql -c \"CREATE USER logadmin WITH PASSWORD 'logadmin123' SUPERUSER;\"" 2>/dev/null || true
+  su - postgres -c "psql -c \"CREATE USER logadmin WITH PASSWORD 'LogAdmin@2026!Db' SUPERUSER;\"" 2>/dev/null || true
   su - postgres -c "psql -c 'CREATE DATABASE logdb OWNER logadmin;'"
 else
   echo "[2/4] 数据库已存在"

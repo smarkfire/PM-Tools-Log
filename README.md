@@ -53,7 +53,7 @@ chmod +x start.sh
 
 ```bash
 # 数据库初始化（创建用户与库）
-sudo -u postgres psql -c "CREATE USER logadmin WITH PASSWORD 'logadmin123' SUPERUSER;"
+sudo -u postgres psql -c "CREATE USER logadmin WITH PASSWORD 'LogAdmin@2026!Db' SUPERUSER;"
 sudo -u postgres psql -c "CREATE DATABASE logdb OWNER logadmin;"
 
 # 后端
