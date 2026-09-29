@@ -1,5 +1,6 @@
 #!/bin/bash
 # 端到端业务流程与数据权限测试脚本
+set +H  # 禁用历史扩展，避免密码中的 ! 被误解析
 BASE="http://localhost:3000/api"
 PASS=0; FAIL=0
 

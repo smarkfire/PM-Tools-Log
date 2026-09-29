@@ -4,6 +4,7 @@
 # 2. 初始化 Supabase 数据库（幂等；未配置 DATABASE_URL 时跳过，如本地/部分预览环境）
 # 3. 生产环境冒烟测试（访问当前线上部署，验证 API/数据库可用性；失败不阻断构建）
 set -e
+set +H  # 禁用历史扩展，避免密码中的 ! 被误解析
 
 echo "[build] 1/3 构建前端..."
 (cd web && npm install && npx vite build) || exit 1
@@ -25,9 +26,13 @@ if [ "$VERCEL_ENV" = "production" ] && [ -n "$DATABASE_URL" ]; then
   curl -sS --max-time 60 "$SMOKE_URL/api/health" || echo "[smoke] 健康检查失败（忽略）"
   echo ""
   echo "[smoke] POST $SMOKE_URL/api/auth/login (director1)"
+  SMOKE_BODY=$(cat <<'JSON'
+{"username":"director1","password":"PmLog@2026!Secure"}
+JSON
+)
   curl -sS --max-time 60 -X POST "$SMOKE_URL/api/auth/login" \
     -H "Content-Type: application/json" \
-    -d '{"username":"director1","password":"PmLog@2026!Secure"}' | head -c 500 || echo "[smoke] 登录测试失败（忽略）"
+    -d "$SMOKE_BODY" | head -c 500 || echo "[smoke] 登录测试失败（忽略）"
   echo ""
 else
   echo "[build] 非生产环境或未配置数据库，跳过冒烟测试"
