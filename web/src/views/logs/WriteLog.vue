@@ -1,8 +1,12 @@
 <template>
   <div class="page-container">
     <div class="page-header">
-      <div class="page-title">填写日志</div>
-      <div class="page-desc">记录今日工作，支持通义千问 / DeepSeek AI 优化</div>
+      <div class="page-title">{{ isEdit ? `编辑日志（${form.logDate}）` : '填写日志' }}</div>
+      <div class="page-desc">
+        {{ isEdit
+          ? '修改已有日志并保存；超过本周的修改需上级审批通过后才可提交'
+          : '记录今日工作，支持通义千问 / DeepSeek AI 优化' }}
+      </div>
     </div>
 
     <el-row :gutter="16">
@@ -163,7 +167,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { logApi, projectApi, promptApi, chatApi } from '../../api';
 import { useUserStore } from '../../stores/user';
@@ -178,8 +183,15 @@ const aiProvider = ref<'qwen' | 'deepseek'>('qwen');
 const selectedPromptId = ref<number | undefined>(undefined);
 
 const today = new Date().toISOString().slice(0, 10);
+const route = useRoute();
+const router = useRouter();
+
+// 编辑模式：?date=YYYY-MM-DD 时加载当天已有日志
+const editDate = computed(() => (route.query.date as string) || '');
+const isEdit = computed(() => !!editDate.value);
+
 const form = reactive({
-  logDate: today,
+  logDate: editDate.value || today,
   projectId: undefined as number | undefined,
   hours: 8,
   content: '',
@@ -202,6 +214,26 @@ onMounted(async () => {
   providers.deepseekConfigured = providerRes.data.deepseekConfigured;
   if (!providers.qwenConfigured && providers.deepseekConfigured) {
     aiProvider.value = 'deepseek';
+  }
+
+  // 编辑模式：加载已有日志内容
+  if (isEdit.value) {
+    const res = await logApi.list({
+      userId: userStore.user?.id,
+      startDate: editDate.value,
+      endDate: editDate.value,
+      page: 1,
+      pageSize: 1,
+    });
+    const existing = res.data.list?.[0];
+    if (existing) {
+      form.logDate = existing.log_date;
+      form.projectId = existing.project_id || undefined;
+      form.hours = existing.hours ?? 8;
+      form.content = existing.content;
+      form.aiProvider = existing.ai_provider || '';
+      optimizedContent.value = existing.optimized_content || '';
+    }
   }
 });
 
@@ -246,6 +278,11 @@ async function handleSave() {
       hours: form.hours,
     });
     ElMessage.success('日志保存成功');
+    if (isEdit.value) {
+      // 编辑模式：保存后返回日志列表
+      router.push('/logs');
+      return;
+    }
     form.content = '';
     optimizedContent.value = '';
   } finally {

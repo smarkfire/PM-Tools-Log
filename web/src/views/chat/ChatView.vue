@@ -94,7 +94,10 @@
             {{ userStore.user?.displayName?.charAt(0) }}
           </el-avatar>
           <el-avatar v-else :size="32" class="msg-avatar ai-avatar">AI</el-avatar>
-          <div class="chat-bubble" :class="msg.role">{{ msg.content }}</div>
+          <div v-if="msg.role === 'user'" class="chat-bubble user">{{ msg.content }}</div>
+          <div v-else class="chat-bubble assistant">
+            <MdPreview :content="msg.content" />
+          </div>
         </div>
 
         <div v-if="aiThinking" class="message-row assistant">
@@ -165,6 +168,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { chatApi } from '../../api';
 import { useUserStore } from '../../stores/user';
 import { useAppStore } from '../../stores/app';
+import MdPreview from '../../components/MdPreview.vue';
 import type { Conversation, ChatMessage } from '../../types';
 
 const userStore = useUserStore();

@@ -25,6 +25,7 @@ export const authApi = {
   me: () => request.get<UserInfo>('/auth/me'),
   changePassword: (data: { oldPassword: string; newPassword: string }) =>
     request.put('/auth/password', data),
+  updateProfile: (data: { email: string }) => request.put('/auth/profile', data),
 };
 
 // ==================== 用户 ====================
@@ -97,7 +98,93 @@ export const reportApi = {
   list: (params: { type?: string; scope?: string; projectId?: number; page?: number; pageSize?: number }) =>
     request.get<{ list: Report[]; total: number }>('/reports', { params }),
   detail: (id: number) => request.get<Report>(`/reports/${id}`),
+  update: (id: number, data: { content: string }) => request.put(`/reports/${id}`, data),
   remove: (id: number) => request.delete(`/reports/${id}`),
+};
+
+// ==================== 修改审批（日志/报告跨周修改） ====================
+export interface EditApproval {
+  id: number;
+  user_id: number;
+  user_name?: string;
+  username?: string;
+  target_type: 'log' | 'report';
+  target_id: number;
+  target_summary?: string;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected' | 'used';
+  approve_note?: string;
+  approver_id?: number;
+  approved_at?: string;
+  created_at: string;
+}
+
+export const approvalApi = {
+  create: (data: { targetType: 'log' | 'report'; targetId: number; reason: string }) =>
+    request.post('/approvals', data),
+  mine: () => request.get<EditApproval[]>('/approvals/mine'),
+  pending: () => request.get<EditApproval[]>('/approvals/pending'),
+  handle: (id: number, data: { approved: boolean; note?: string }) =>
+    request.put(`/approvals/${id}`, data),
+};
+
+// ==================== 用户反馈 ====================
+export interface Feedback {
+  id: number;
+  user_id: number;
+  user_name?: string;
+  username?: string;
+  content: string;
+  contact?: string;
+  status: 'pending' | 'processed';
+  admin_reply?: string;
+  created_at: string;
+}
+
+export const feedbackApi = {
+  create: (data: { content: string; contact?: string }) => request.post('/feedback', data),
+  mine: () => request.get<Feedback[]>('/feedback/mine'),
+  adminList: (params?: { status?: string }) =>
+    request.get<Feedback[]>('/admin/feedback', { params }),
+  adminReply: (id: number, data: { adminReply?: string; status?: string }) =>
+    request.put(`/admin/feedback/${id}`, data),
+};
+
+// ==================== 版本管理 ====================
+export interface AppVersion {
+  id: number;
+  version: string;
+  title: string;
+  description: string;
+  released_at: string;
+}
+
+export const versionApi = {
+  list: () => request.get<AppVersion[]>('/versions'),
+  adminList: () => request.get<AppVersion[]>('/admin/versions'),
+  release: (data: { version: string; title: string; description: string }) =>
+    request.post('/admin/versions', data),
+  remove: (id: number) => request.delete(`/admin/versions/${id}`),
+};
+
+// ==================== 收件箱通知 ====================
+export interface Notification {
+  id: number;
+  user_id: number;
+  title: string;
+  content: string;
+  type: string;
+  link?: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+export const notificationApi = {
+  list: (params: { page?: number; pageSize?: number }) =>
+    request.get<{ list: Notification[]; total: number }>('/notifications', { params }),
+  unreadCount: () => request.get<{ count: number }>('/notifications/unread-count'),
+  markRead: (id: number) => request.put(`/notifications/${id}/read`),
+  markAllRead: () => request.put('/notifications/read-all'),
 };
 
 // ==================== 提示词 ====================

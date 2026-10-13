@@ -50,6 +50,26 @@
         <template #title>AI 助手</template>
       </el-menu-item>
 
+      <el-menu-item index="/inbox">
+        <el-icon><Bell /></el-icon>
+        <template #title>
+          <span class="menu-title-with-badge">
+            收件箱
+            <el-badge v-if="unreadCount > 0" :value="unreadCount" :max="99" class="menu-badge" />
+          </span>
+        </template>
+      </el-menu-item>
+
+      <el-menu-item index="/approvals">
+        <el-icon><Checked /></el-icon>
+        <template #title>审批中心</template>
+      </el-menu-item>
+
+      <el-menu-item index="/feedback">
+        <el-icon><Promotion /></el-icon>
+        <template #title>意见反馈</template>
+      </el-menu-item>
+
       <el-menu-item v-if="menus.prompts" index="/prompts">
         <el-icon><MagicStick /></el-icon>
         <template #title>提示词配置</template>
@@ -69,10 +89,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { useUserStore } from '../../stores/user';
 import { useConfigStore } from '../../stores/config';
+import { notificationApi } from '../../api';
 
 defineProps<{ collapsed?: boolean }>();
 
@@ -83,11 +104,31 @@ const configStore = useConfigStore();
 const activeMenu = computed(() => route.path);
 const menus = computed(() => configStore.menuVisibility);
 
+// 收件箱未读数（定时轮询刷新徽标）
+const unreadCount = ref(0);
+let unreadTimer: ReturnType<typeof setInterval> | undefined;
+
+async function refreshUnread() {
+  if (!userStore.isLoggedIn) return;
+  try {
+    const res = await notificationApi.unreadCount();
+    unreadCount.value = res.data.count || 0;
+  } catch {
+    // 忽略轮询失败
+  }
+}
+
 onMounted(() => {
   // 登录后拉取菜单开关（未加载完成时默认全部可见）
   if (userStore.isLoggedIn && !configStore.loaded) {
     configStore.fetchMenus();
   }
+  refreshUnread();
+  unreadTimer = setInterval(refreshUnread, 60_000);
+});
+
+onUnmounted(() => {
+  if (unreadTimer) clearInterval(unreadTimer);
 });
 
 // 总监/项目经理/小组长可查看团队日志
@@ -141,5 +182,15 @@ const canViewTeamLogs = computed(() => {
 
 :deep(.el-menu-item:hover) {
   background: rgba(255, 255, 255, 0.06);
+}
+
+.menu-title-with-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.menu-badge :deep(.el-badge__content) {
+  border: none;
 }
 </style>

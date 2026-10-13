@@ -89,6 +89,24 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '系统设置', roles: ['director'] },
       },
       {
+        path: 'inbox',
+        name: 'Inbox',
+        component: () => import('../views/notifications/Inbox.vue'),
+        meta: { title: '收件箱' },
+      },
+      {
+        path: 'feedback',
+        name: 'Feedback',
+        component: () => import('../views/feedback/Feedback.vue'),
+        meta: { title: '意见反馈' },
+      },
+      {
+        path: 'approvals',
+        name: 'ApprovalCenter',
+        component: () => import('../views/approvals/ApprovalCenter.vue'),
+        meta: { title: '审批中心' },
+      },
+      {
         path: 'profile',
         name: 'Profile',
         component: () => import('../views/settings/Profile.vue'),

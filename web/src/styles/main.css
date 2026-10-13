@@ -117,6 +117,11 @@ body {
   border-bottom-left-radius: 4px;
 }
 
+/* Markdown 渲染的 AI 气泡不受 pre-wrap 影响 */
+.chat-bubble.assistant .md-preview {
+  white-space: normal;
+}
+
 /* 滚动条美化 */
 ::-webkit-scrollbar {
   width: 6px;

@@ -152,6 +152,52 @@ CREATE TABLE IF NOT EXISTS user_ai_config (
   updated_at         TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+-- 修改审批表（日志/报告超过本周后修改需上级审批）
+CREATE TABLE IF NOT EXISTS edit_approvals (
+  id           SERIAL PRIMARY KEY,
+  user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, -- 申请人
+  target_type  VARCHAR(20) NOT NULL,               -- log / report
+  target_id    INTEGER NOT NULL,
+  reason       TEXT NOT NULL,                      -- 申请原因
+  status       VARCHAR(20) NOT NULL DEFAULT 'pending', -- pending / approved / rejected / used
+  approver_id  INTEGER REFERENCES users(id),       -- 审批人
+  approve_note TEXT,                              -- 审批意见
+  approved_at  TIMESTAMP,
+  created_at   TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- 用户反馈表（使用意见收集）
+CREATE TABLE IF NOT EXISTS feedback (
+  id          SERIAL PRIMARY KEY,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  content     TEXT NOT NULL,
+  contact     VARCHAR(100),                        -- 联系方式（可选）
+  status      VARCHAR(20) NOT NULL DEFAULT 'pending', -- pending / processed
+  admin_reply TEXT,                               -- 管理员回复
+  created_at  TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- 版本记录表（软件版本更新历史）
+CREATE TABLE IF NOT EXISTS app_versions (
+  id          SERIAL PRIMARY KEY,
+  version     VARCHAR(20) NOT NULL,
+  title       VARCHAR(100) NOT NULL,
+  description TEXT NOT NULL,
+  released_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- 收件箱通知表（版本发布、审批结果等站内消息）
+CREATE TABLE IF NOT EXISTS notifications (
+  id         SERIAL PRIMARY KEY,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title      VARCHAR(200) NOT NULL,
+  content    TEXT NOT NULL,
+  type       VARCHAR(20) NOT NULL DEFAULT 'system', -- system / version / approval
+  link       VARCHAR(200),                          -- 可选跳转路径
+  is_read    BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
 -- 索引
 CREATE INDEX IF NOT EXISTS idx_work_logs_user     ON work_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_work_logs_project  ON work_logs(project_id);
@@ -160,6 +206,9 @@ CREATE INDEX IF NOT EXISTS idx_project_members_user ON project_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_ai_messages_conv   ON ai_messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_user_prompts_user  ON user_prompts(user_id);
 CREATE INDEX IF NOT EXISTS idx_reports_project    ON reports(project_id);
+CREATE INDEX IF NOT EXISTS idx_edit_approvals_user ON edit_approvals(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read);
+CREATE INDEX IF NOT EXISTS idx_feedback_user      ON feedback(user_id);
 `;
 
 /** 系统默认提示词种子数据（用户未自定义提示词时使用） */

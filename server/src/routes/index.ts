@@ -19,6 +19,7 @@ const wrap = asyncHandler;
 router.post('/auth/register', wrap(authController.register));
 router.post('/auth/login', wrap(authController.login));
 router.get('/auth/me', authMiddleware, wrap(authController.me));
+router.put('/auth/profile', authMiddleware, wrap(authController.updateProfile));
 router.put('/auth/password', authMiddleware, wrap(authController.changePassword));
 
 // ==================== 用户管理 ====================
@@ -74,5 +75,36 @@ router.get('/ai-config', authMiddleware, wrap(systemConfigController.getMyAiConf
 router.put('/ai-config', authMiddleware, wrap(systemConfigController.updateMyAiConfig));
 // 菜单可见性（前端侧边栏动态显示）
 router.get('/config/menus', authMiddleware, wrap(systemConfigController.getVisibleMenus));
+
+// ==================== 修改审批（日志/报告跨周修改） ====================
+import * as approvalController from '../controllers/approval.controller';
+router.post('/approvals', authMiddleware, wrap(approvalController.createApproval));
+router.get('/approvals/mine', authMiddleware, wrap(approvalController.listMyApprovals));
+router.get('/approvals/pending', authMiddleware, wrap(approvalController.listPendingApprovals));
+router.put('/approvals/:id', authMiddleware, wrap(approvalController.handleApproval));
+
+// ==================== 报告编辑 ====================
+router.put('/reports/:id', authMiddleware, wrap(reportController.updateReport));
+
+// ==================== 用户反馈 ====================
+import * as feedbackController from '../controllers/feedback.controller';
+router.post('/feedback', authMiddleware, wrap(feedbackController.createFeedback));
+router.get('/feedback/mine', authMiddleware, wrap(feedbackController.listMyFeedback));
+router.get('/admin/feedback', authMiddleware, wrap(feedbackController.listAllFeedback));
+router.put('/admin/feedback/:id', authMiddleware, wrap(feedbackController.replyFeedback));
+
+// ==================== 版本管理 ====================
+import * as versionController from '../controllers/version.controller';
+router.get('/versions', authMiddleware, wrap(versionController.listVersions));
+router.get('/admin/versions', authMiddleware, wrap(versionController.listAdminVersions));
+router.post('/admin/versions', authMiddleware, wrap(versionController.releaseVersion));
+router.delete('/admin/versions/:id', authMiddleware, wrap(versionController.deleteVersion));
+
+// ==================== 收件箱通知 ====================
+import * as notificationController from '../controllers/notification.controller';
+router.get('/notifications', authMiddleware, wrap(notificationController.listNotifications));
+router.get('/notifications/unread-count', authMiddleware, wrap(notificationController.unreadCount));
+router.put('/notifications/:id/read', authMiddleware, wrap(notificationController.markRead));
+router.put('/notifications/read-all', authMiddleware, wrap(notificationController.markAllRead));
 
 export default router;

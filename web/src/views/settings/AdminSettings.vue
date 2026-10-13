@@ -103,14 +103,180 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <!-- ==================== 版本管理 ==================== -->
+    <el-row :gutter="16" style="margin-top: 16px">
+      <el-col :xs="24" :md="10">
+        <el-card shadow="never">
+          <template #header>
+            <div class="card-header-row">
+              <span>发布新版本</span>
+              <el-tag size="small" type="info">发布后自动向所有用户收件箱发送通知</el-tag>
+            </div>
+          </template>
+          <el-form label-position="top" v-loading="releasing">
+            <el-form-item label="版本号" required>
+              <el-input v-model="versionForm.version" placeholder="如 1.1.0" maxlength="20" />
+            </el-form-item>
+            <el-form-item label="版本标题" required>
+              <el-input v-model="versionForm.title" placeholder="如 新增审批与反馈功能" maxlength="100" />
+            </el-form-item>
+            <el-form-item label="更新说明（Markdown）" required>
+              <el-input
+                v-model="versionForm.description"
+                type="textarea"
+                :rows="6"
+                placeholder="1. xxx&#10;2. xxx&#10;3. xxx"
+                maxlength="2000"
+                show-word-limit
+              />
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" :loading="releasing" @click="releaseVersion">发布版本</el-button>
+            </el-form-item>
+          </el-form>
+
+          <h4 class="section-title">版本历史</h4>
+          <el-timeline v-if="versions.length" class="version-timeline">
+            <el-timeline-item
+              v-for="v in versions"
+              :key="v.id"
+              :timestamp="formatTime(v.released_at)"
+              placement="top"
+            >
+              <div class="version-item-row">
+                <div class="version-item-info">
+                  <div class="version-title">v{{ v.version }} {{ v.title }}</div>
+                  <div class="version-desc">{{ v.description }}</div>
+                </div>
+                <el-button link type="danger" size="small" @click="removeVersion(v)">删除</el-button>
+              </div>
+            </el-timeline-item>
+          </el-timeline>
+          <el-empty v-else description="暂无版本记录" :image-size="60" />
+        </el-card>
+      </el-col>
+
+      <!-- ==================== 反馈管理 ==================== -->
+      <el-col :xs="24" :md="14">
+        <el-card shadow="never" v-loading="fbLoading">
+          <template #header>
+            <div class="card-header-row">
+              <span>用户反馈</span>
+              <el-radio-group v-model="fbFilter" size="small" @change="loadFeedback">
+                <el-radio-button value="">全部</el-radio-button>
+                <el-radio-button value="pending">待处理</el-radio-button>
+                <el-radio-button value="processed">已处理</el-radio-button>
+              </el-radio-group>
+            </div>
+          </template>
+          <div v-if="feedbackList.length" class="fb-list">
+            <div v-for="f in feedbackList" :key="f.id" class="fb-item">
+              <div class="fb-top">
+                <span class="fb-user">{{ f.user_name }}（{{ f.username }}）</span>
+                <el-tag :type="f.status === 'processed' ? 'success' : 'warning'" size="small">
+                  {{ f.status === 'processed' ? '已处理' : '待处理' }}
+                </el-tag>
+                <span class="fb-time">{{ formatTime(f.created_at) }}</span>
+              </div>
+              <div class="fb-content">{{ f.content }}</div>
+              <div v-if="f.contact" class="fb-contact">联系方式：{{ f.contact }}</div>
+              <div class="fb-reply-area">
+                <el-input
+                  v-model="replyDraft[f.id]"
+                  type="textarea"
+                  :rows="2"
+                  :placeholder="f.admin_reply ? `当前回复：${f.admin_reply}` : '回复用户（回复后会通知对方）'"
+                />
+                <div class="fb-reply-actions">
+                  <el-button size="small" type="primary" @click="replyFeedback(f)">回复并标记已处理</el-button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <el-empty v-else description="暂无反馈" />
+        </el-card>
+      </el-col>
+    </el-row>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
-import { ElMessage } from 'element-plus';
-import { adminConfigApi } from '../../api';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { adminConfigApi, versionApi, feedbackApi, type AppVersion, type Feedback } from '../../api';
 import { useConfigStore } from '../../stores/config';
+
+function formatTime(t: string) {
+  return new Date(t).toLocaleString('zh-CN', { hour12: false });
+}
+
+// ==================== 版本管理 ====================
+const releasing = ref(false);
+const versions = ref<AppVersion[]>([]);
+const versionForm = reactive({ version: '', title: '', description: '' });
+
+async function loadVersions() {
+  const res = await versionApi.adminList();
+  versions.value = res.data || [];
+}
+
+async function releaseVersion() {
+  if (!versionForm.version.trim() || !versionForm.title.trim() || !versionForm.description.trim()) {
+    ElMessage.warning('版本号、标题和更新说明均为必填');
+    return;
+  }
+  releasing.value = true;
+  try {
+    await versionApi.release({
+      version: versionForm.version.trim(),
+      title: versionForm.title.trim(),
+      description: versionForm.description.trim(),
+    });
+    ElMessage.success('版本已发布，已向所有用户收件箱发送通知');
+    versionForm.version = '';
+    versionForm.title = '';
+    versionForm.description = '';
+    loadVersions();
+  } finally {
+    releasing.value = false;
+  }
+}
+
+async function removeVersion(v: AppVersion) {
+  await ElMessageBox.confirm(`确定删除版本 v${v.version} 的记录吗？`, '提示', { type: 'warning' });
+  await versionApi.remove(v.id);
+  ElMessage.success('已删除');
+  loadVersions();
+}
+
+// ==================== 反馈管理 ====================
+const feedbackList = ref<Feedback[]>([]);
+const fbFilter = ref('');
+const fbLoading = ref(false);
+const replyDraft = reactive<Record<number, string>>({});
+
+async function loadFeedback() {
+  fbLoading.value = true;
+  try {
+    const res = await feedbackApi.adminList(fbFilter.value ? { status: fbFilter.value } : undefined);
+    feedbackList.value = res.data || [];
+  } finally {
+    fbLoading.value = false;
+  }
+}
+
+async function replyFeedback(f: Feedback) {
+  const reply = (replyDraft[f.id] || '').trim();
+  if (!reply) {
+    ElMessage.warning('请先填写回复内容');
+    return;
+  }
+  await feedbackApi.adminReply(f.id, { adminReply: reply, status: 'processed' });
+  ElMessage.success('已回复并标记为已处理');
+  replyDraft[f.id] = '';
+  loadFeedback();
+}
 
 const configStore = useConfigStore();
 
@@ -155,7 +321,11 @@ const menuItems = [
   { key: 'menu_ai_settings', label: '个人 AI 配置', desc: '用户配置自己的 API Key' },
 ] as const;
 
-onMounted(loadConfig);
+onMounted(() => {
+  loadConfig();
+  loadVersions();
+  loadFeedback();
+});
 
 async function loadConfig() {
   loading.value = true;
@@ -256,6 +426,92 @@ async function saveMenuConfig() {
 
 .save-bar {
   margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* 版本管理 */
+.version-timeline {
+  margin-top: 8px;
+}
+
+.version-item-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.version-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.version-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: #303133;
+}
+
+.version-desc {
+  font-size: 13px;
+  color: #606266;
+  margin-top: 4px;
+  white-space: pre-wrap;
+}
+
+/* 反馈管理 */
+.fb-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fb-item {
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.fb-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.fb-user {
+  font-weight: 600;
+  font-size: 14px;
+  color: #303133;
+}
+
+.fb-time {
+  margin-left: auto;
+  font-size: 12px;
+  color: #c0c4cc;
+}
+
+.fb-content {
+  font-size: 13px;
+  color: #303133;
+  margin-top: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.fb-contact {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 6px;
+}
+
+.fb-reply-area {
+  margin-top: 10px;
+}
+
+.fb-reply-actions {
+  margin-top: 8px;
   display: flex;
   justify-content: flex-end;
 }

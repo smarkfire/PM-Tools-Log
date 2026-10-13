@@ -210,7 +210,67 @@
             {{ currentReport.period_start }} ~ {{ currentReport.period_end }}
           </el-descriptions-item>
         </el-descriptions>
-        <div class="report-content markdown-content" v-html="renderedContent"></div>
+        <div class="report-content">
+          <MdPreview :content="currentReport.content" />
+        </div>
+      </template>
+      <template #footer>
+        <el-button
+          v-if="currentReport && currentReport.user_id === userStore.user?.id"
+          type="primary"
+          @click="handleEditReport"
+        >
+          编辑此报告
+        </el-button>
+        <el-button @click="detailVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 编辑报告对话框 -->
+    <el-dialog v-model="editVisible" title="编辑报告内容（Markdown）" :width="isMobile ? '94%' : '860px'" top="4vh">
+      <el-row :gutter="12">
+        <el-col :xs="24" :md="12">
+          <div class="edit-label">编辑（Markdown 格式）</div>
+          <el-input v-model="editForm.content" type="textarea" :rows="18" class="edit-textarea" />
+        </el-col>
+        <el-col :xs="24" :md="12" class="edit-preview-col">
+          <div class="edit-label">预览</div>
+          <div class="edit-preview">
+            <MdPreview :content="editForm.content" />
+          </div>
+        </el-col>
+      </el-row>
+      <template #footer>
+        <el-button @click="editVisible = false">取消</el-button>
+        <el-button type="primary" :loading="editSaving" @click="saveEdit">保存修改</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 跨周修改申请弹窗 -->
+    <el-dialog v-model="applyVisible" title="申请修改已过期的报告" :width="isMobile ? '92%' : '480px'">
+      <el-alert
+        type="warning"
+        :closable="false"
+        show-icon
+        title="该报告已超过本周"
+        description="本周过后修改需经上级领导审批。请填写修改原因提交申请，审批通过后即可修改（仅可修改一次）。"
+        style="margin-bottom: 16px"
+      />
+      <el-form label-position="top">
+        <el-form-item label="修改原因" required>
+          <el-input
+            v-model="applyForm.reason"
+            type="textarea"
+            :rows="4"
+            placeholder="请说明为什么需要修改这份报告"
+            maxlength="500"
+            show-word-limit
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="applyVisible = false">取消</el-button>
+        <el-button type="primary" :loading="applySubmitting" @click="submitApply">提交申请</el-button>
       </template>
     </el-dialog>
   </div>
@@ -219,9 +279,11 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { reportApi, projectApi, promptApi, chatApi } from '../../api';
+import { reportApi, projectApi, promptApi, chatApi, approvalApi } from '../../api';
 import { useUserStore } from '../../stores/user';
 import { useAppStore } from '../../stores/app';
+import { timestampInCurrentWeek } from '../../utils/date';
+import MdPreview from '../../components/MdPreview.vue';
 import type { Report, Project, UserPrompt, ProjectMember } from '../../types';
 
 const userStore = useUserStore();
@@ -278,26 +340,74 @@ const visibleMembers = computed(() => {
   return [...map.values()];
 });
 
-// 简易 Markdown 渲染（标题/加粗/列表/换行）
-const renderedContent = computed(() => {
-  if (!currentReport.value) return '';
-  let md = currentReport.value.content
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-  md = md
-    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^# (.+)$/gm, '<h2>$1</h2>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/^[-*] (.+)$/gm, '<li>$1</li>')
-    .replace(/\n{2,}/g, '</p><p>')
-    .replace(/\n/g, '<br>');
-  return `<p>${md}</p>`;
-});
-
 function formatTime(t: string) {
   return new Date(t).toLocaleString('zh-CN', { hour12: false });
+}
+
+// ==================== 编辑与跨周审批 ====================
+const editVisible = ref(false);
+const editSaving = ref(false);
+const editForm = reactive({ content: '' });
+
+const applyVisible = ref(false);
+const applySubmitting = ref(false);
+const applyForm = reactive({ reason: '' });
+
+/** 编辑自己生成的报告：本周内直接编辑；跨周需审批（总监除外） */
+function handleEditReport() {
+  if (!currentReport.value) return;
+  if (currentReport.value.user_id !== userStore.user?.id) {
+    ElMessage.warning('只能编辑自己生成的报告');
+    return;
+  }
+  const inWeek =
+    timestampInCurrentWeek(currentReport.value.created_at) || userStore.user?.role === 'director';
+  if (!inWeek) {
+    applyForm.reason = '';
+    detailVisible.value = false;
+    applyVisible.value = true;
+    return;
+  }
+  editForm.content = currentReport.value.content;
+  detailVisible.value = false;
+  editVisible.value = true;
+}
+
+async function saveEdit() {
+  if (!editForm.content.trim()) {
+    ElMessage.warning('报告内容不能为空');
+    return;
+  }
+  editSaving.value = true;
+  try {
+    const res = await reportApi.update(currentReport.value!.id, { content: editForm.content });
+    ElMessage.success('报告已更新');
+    editVisible.value = false;
+    currentReport.value = res.data;
+    detailVisible.value = true;
+    loadReports();
+  } finally {
+    editSaving.value = false;
+  }
+}
+
+async function submitApply() {
+  if (!applyForm.reason.trim()) {
+    ElMessage.warning('请填写修改原因');
+    return;
+  }
+  applySubmitting.value = true;
+  try {
+    await approvalApi.create({
+      targetType: 'report',
+      targetId: currentReport.value!.id,
+      reason: applyForm.reason.trim(),
+    });
+    ElMessage.success('申请已提交，等待上级审批');
+    applyVisible.value = false;
+  } finally {
+    applySubmitting.value = false;
+  }
 }
 
 function showGenerateDialog(type: 'weekly' | 'monthly') {
@@ -460,6 +570,33 @@ onMounted(async () => {
 /* 详情 */
 .detail-desc {
   margin-bottom: 16px;
+}
+
+/* 编辑弹窗 */
+.edit-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #606266;
+  margin-bottom: 6px;
+}
+
+.edit-preview-col {
+  margin-top: 0;
+}
+
+@media (max-width: 992px) {
+  .edit-preview-col {
+    margin-top: 12px;
+  }
+}
+
+.edit-preview {
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+  padding: 12px;
+  height: 420px;
+  overflow-y: auto;
+  background: #fafbfc;
 }
 
 .report-content {

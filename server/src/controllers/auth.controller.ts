@@ -128,6 +128,34 @@ export async function me(req: Request, res: Response) {
 }
 
 /**
+ * 更新个人信息（当前仅支持修改邮箱）
+ * PUT /api/auth/profile  body: { email }
+ */
+export async function updateProfile(req: Request, res: Response) {
+  const userId = req.authUser!.id;
+  const { email } = req.body || {};
+  if (!email || !email.trim()) {
+    res.status(400).json(fail('邮箱不能为空'));
+    return;
+  }
+  const value = email.trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+    res.status(400).json(fail('邮箱格式不正确'));
+    return;
+  }
+  const dup = await queryOne<{ id: number }>(
+    'SELECT id FROM users WHERE email = $1 AND id != $2',
+    [value, userId]
+  );
+  if (dup) {
+    res.status(400).json(fail('该邮箱已被其他用户使用'));
+    return;
+  }
+  await queryOne('UPDATE users SET email = $1, updated_at = NOW() WHERE id = $2', [value, userId]);
+  res.json(success(null, '邮箱更新成功'));
+}
+
+/**
  * 修改密码
  * PUT /api/auth/password
  */

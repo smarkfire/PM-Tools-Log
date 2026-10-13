@@ -174,7 +174,7 @@ export async function listReports(req: Request, res: Response) {
   // 权限过滤：总监看全部；经理/组长看权限范围内目标用户的报告；成员看自己生成或关于自己的
   if (scopeData.type !== 'all') {
     params.push([...(scopeData.userIds || []), currentUserId]);
-    conditions.push(`(r.target_user_id = ANY($${params.length}::int[]) OR r.user_id = $${params.length}::int[] OR r.project_id IS NULL AND r.user_id = ANY($${params.length}::int[]))`);
+    conditions.push(`(r.target_user_id = ANY($${params.length}::int[]) OR r.user_id = ANY($${params.length}::int[]))`);
   }
 
   const { type, scope, projectId, page, pageSize } = req.query;
@@ -249,6 +249,58 @@ export async function getReport(req: Request, res: Response) {
     return;
   }
   res.json(success(report));
+}
+
+/**
+ * 编辑报告内容（生成者本人）
+ * 编辑规则：生成时间在本周内可自由修改；跨周修改需已获上级审批通过的申请
+ * PUT /api/reports/:id
+ */
+export async function updateReport(req: Request, res: Response) {
+  const currentUserId = req.authUser!.id;
+  const reportId = parseInt(req.params.id, 10);
+  const { content } = req.body || {};
+  if (!content?.trim()) {
+    res.status(400).json(fail('报告内容不能为空'));
+    return;
+  }
+  const report = await queryOne('SELECT id, user_id FROM reports WHERE id = $1', [reportId]);
+  if (!report) {
+    res.status(404).json(fail('报告不存在'));
+    return;
+  }
+  if (report.user_id !== currentUserId) {
+    res.status(403).json(fail('只能编辑自己生成的报告', 403));
+    return;
+  }
+  // 跨周修改校验：生成时间非本周需审批（项目总监除外）
+  const editable = await queryOne<{ in_week: boolean }>(
+    `SELECT (created_at >= date_trunc('week', CURRENT_DATE)) AS in_week
+     FROM reports WHERE id = $1`,
+    [reportId]
+  );
+  if (!editable?.in_week) {
+    const meRole = await queryOne<{ role: string }>('SELECT role FROM users WHERE id = $1', [currentUserId]);
+    if (meRole?.role !== 'director') {
+      const approval = await queryOne<{ id: number }>(
+        `SELECT id FROM edit_approvals
+         WHERE user_id = $1 AND target_type = 'report' AND target_id = $2 AND status = 'approved'
+         LIMIT 1`,
+        [currentUserId, reportId]
+      );
+      if (!approval) {
+        res.status(403).json(fail('该报告已超过本周，修改需先提交申请并经上级审批', 403));
+        return;
+      }
+      // 审批通过后仅允许修改一次，用完即失效
+      await queryOne(`UPDATE edit_approvals SET status = 'used' WHERE id = $1`, [approval.id]);
+    }
+  }
+  const updated = await queryOne(
+    'UPDATE reports SET content = $1 WHERE id = $2 RETURNING *',
+    [content, reportId]
+  );
+  res.json(success(updated, '报告已更新'));
 }
 
 /**

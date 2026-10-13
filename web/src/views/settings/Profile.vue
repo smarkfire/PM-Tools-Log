@@ -12,7 +12,12 @@
           <el-descriptions :column="1" border>
             <el-descriptions-item label="姓名">{{ userInfo?.displayName }}</el-descriptions-item>
             <el-descriptions-item label="用户名">{{ userInfo?.username }}</el-descriptions-item>
-            <el-descriptions-item label="邮箱">{{ userInfo?.email }}</el-descriptions-item>
+            <el-descriptions-item label="邮箱">
+              <span class="email-text">{{ userInfo?.email }}</span>
+              <el-button link type="primary" size="small" style="margin-left: 8px" @click="showEmailDialog">
+                修改
+              </el-button>
+            </el-descriptions-item>
             <el-descriptions-item label="全局角色">
               <el-tag type="primary" size="small">{{ userStore.roleLabel }}</el-tag>
             </el-descriptions-item>
@@ -118,6 +123,19 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <!-- 修改邮箱对话框 -->
+    <el-dialog v-model="emailVisible" title="修改邮箱" width="420px">
+      <el-form label-width="70px">
+        <el-form-item label="新邮箱">
+          <el-input v-model="emailForm.email" placeholder="请输入新邮箱" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="emailVisible = false">取消</el-button>
+        <el-button type="primary" :loading="emailSaving" @click="saveEmail">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -231,6 +249,33 @@ async function clearMyKeys() {
 function tagType(role: string) {
   const map: Record<string, string> = { manager: 'danger', leader: 'warning', member: 'info' };
   return map[role] || 'info';
+}
+
+// ==================== 修改邮箱 ====================
+const emailVisible = ref(false);
+const emailSaving = ref(false);
+const emailForm = reactive({ email: '' });
+
+function showEmailDialog() {
+  emailForm.email = userInfo.value?.email || '';
+  emailVisible.value = true;
+}
+
+async function saveEmail() {
+  if (!emailForm.email.trim()) {
+    ElMessage.warning('邮箱不能为空');
+    return;
+  }
+  emailSaving.value = true;
+  try {
+    await authApi.updateProfile({ email: emailForm.email.trim() });
+    ElMessage.success('邮箱修改成功');
+    emailVisible.value = false;
+    // 刷新用户信息以显示新邮箱
+    await userStore.fetchUserInfo();
+  } finally {
+    emailSaving.value = false;
+  }
 }
 
 function formatTime(t?: string) {

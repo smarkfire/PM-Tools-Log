@@ -110,6 +110,7 @@ export async function getLog(req: Request, res: Response) {
 
 /**
  * 创建/更新日志（仅限本人，一天一篇，重复提交则更新）
+ * 编辑规则：日志日期在本周内可自由修改；跨周修改需已获上级审批通过的申请
  * POST /api/logs
  */
 export async function saveLog(req: Request, res: Response) {
@@ -124,6 +125,29 @@ export async function saveLog(req: Request, res: Response) {
     [userId, logDate]
   );
   if (existing) {
+    // 跨周修改校验：非本周的日志需审批（项目总监除外）
+    const editable = await queryOne<{ in_week: boolean }>(
+      `SELECT (log_date >= date_trunc('week', CURRENT_DATE)::date) AS in_week
+       FROM work_logs WHERE id = $1`,
+      [existing.id]
+    );
+    if (!editable?.in_week) {
+      const meRole = await queryOne<{ role: string }>('SELECT role FROM users WHERE id = $1', [userId]);
+      if (meRole?.role !== 'director') {
+        const approval = await queryOne<{ id: number }>(
+          `SELECT id FROM edit_approvals
+           WHERE user_id = $1 AND target_type = 'log' AND target_id = $2 AND status = 'approved'
+           LIMIT 1`,
+          [userId, existing.id]
+        );
+        if (!approval) {
+          res.status(403).json(fail('该日志已超过本周，修改需先提交申请并经上级审批', 403));
+          return;
+        }
+        // 审批通过后仅允许修改一次，用完即失效
+        await queryOne(`UPDATE edit_approvals SET status = 'used' WHERE id = $1`, [approval.id]);
+      }
+    }
     const updated = await queryOne(
       `UPDATE work_logs SET content = $1, optimized_content = $2, ai_provider = $3,
          hours = $4, project_id = $5, updated_at = NOW()
