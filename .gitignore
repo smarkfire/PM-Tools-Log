@@ -32,3 +32,4 @@ Thumbs.db
 .trae-html-share-packages/
 .vercel
 .env*
+.uploads/
