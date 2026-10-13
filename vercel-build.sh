@@ -17,7 +17,12 @@ else
 fi
 
 echo "[build] 3/3 冒烟测试（验证当前线上部署）..."
-if [ "$VERCEL_ENV" = "production" ] && [ -n "$DATABASE_URL" ]; then
+if [ "$VERCEL_ENV" = "production" ]; then
+  if [ -n "$DATABASE_URL" ]; then
+    echo "[smoke] DATABASE_URL 已配置（本构建已执行数据库初始化）"
+  else
+    echo "[smoke] DATABASE_URL 未配置！本构建跳过了数据库初始化"
+  fi
   SMOKE_URL="https://pm-tools-log.vercel.app"
   echo "[smoke] GET $SMOKE_URL/ (前端 HTML)"
   curl -sS --max-time 60 "$SMOKE_URL/" | head -c 300 || echo "[smoke] 前端页面获取失败（忽略）"
@@ -30,12 +35,39 @@ if [ "$VERCEL_ENV" = "production" ] && [ -n "$DATABASE_URL" ]; then
 {"username":"director1","password":"PmLog@2026!Secure"}
 JSON
 )
-  curl -sS --max-time 60 -X POST "$SMOKE_URL/api/auth/login" \
+  SMOKE_LOGIN=$(curl -sS --max-time 60 -X POST "$SMOKE_URL/api/auth/login" \
     -H "Content-Type: application/json" \
-    -d "$SMOKE_BODY" | head -c 500 || echo "[smoke] 登录测试失败（忽略）"
+    -d "$SMOKE_BODY")
+  echo "$SMOKE_LOGIN" | head -c 500
   echo ""
+  TOKEN=$(echo "$SMOKE_LOGIN" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+  if [ -z "$TOKEN" ]; then
+    echo "[smoke] FAIL 登录未取得 token"
+    exit 1
+  fi
+
+  # 校验新增表与新接口（缺表/异常则阻断构建，作为部署信号）
+  smoke_api() {
+    local name="$1" path="$2"
+    local body
+    body=$(curl -sS --max-time 60 -H "Authorization: Bearer $TOKEN" "$SMOKE_URL$path")
+    if echo "$body" | grep -q '"code":0'; then
+      echo "[smoke] PASS $name"
+    else
+      echo "[smoke] FAIL $name => $(echo "$body" | head -c 200)"
+      exit 1
+    fi
+  }
+
+  echo "[smoke] 校验新增功能接口（对应 4 张新表）..."
+  smoke_api "GET /api/auth/me（邮箱字段）" "/api/auth/me"
+  smoke_api "GET /api/versions（app_versions 表）" "/api/versions"
+  smoke_api "GET /api/notifications（notifications 表）" "/api/notifications"
+  smoke_api "GET /api/feedback/mine（feedback 表）" "/api/feedback/mine"
+  smoke_api "GET /api/approvals/mine（edit_approvals 表）" "/api/approvals/mine"
+  echo "[smoke] 新增功能接口全部通过"
 else
-  echo "[build] 非生产环境或未配置数据库，跳过冒烟测试"
+  echo "[build] 非生产环境，跳过冒烟测试"
 fi
 
 echo "[build] 完成"
