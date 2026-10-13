@@ -42,17 +42,37 @@ function fmt(d: Date): string {
 /**
  * 生成报告
  * POST /api/reports/generate
- * body: { type: 'weekly'|'monthly', scope: 'personal'|'project', targetUserId?, projectId?, date?, provider?, promptId? }
+ * body: { type: 'weekly'|'monthly', scope: 'personal'|'project', targetUserId?, projectId?,
+ *         date?（基准日期，自动推算周期）, startDate?/endDate?（自定义范围，优先于 date）,
+ *         provider?, promptId? }
  */
 export async function generateReport(req: Request, res: Response) {
   const currentUserId = req.authUser!.id;
-  const { type, scope, targetUserId, projectId, date, provider, promptId } = req.body || {};
+  const { type, scope, targetUserId, projectId, date, startDate, endDate, provider, promptId } = req.body || {};
   if (!['weekly', 'monthly'].includes(type) || !['personal', 'project'].includes(scope)) {
     res.status(400).json(fail('无效的报告类型或范围'));
     return;
   }
   const aiProvider: AiProvider = provider === 'deepseek' ? 'deepseek' : 'qwen';
-  const { start, end } = getPeriod(type, date);
+
+  // 周期计算：自定义日期范围优先，其次按基准日期自动推算
+  let start: string;
+  let end: string;
+  const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+  if (startDate && endDate) {
+    if (!dateRe.test(String(startDate)) || !dateRe.test(String(endDate))) {
+      res.status(400).json(fail('日期格式无效，应为 YYYY-MM-DD'));
+      return;
+    }
+    if (String(startDate) > String(endDate)) {
+      res.status(400).json(fail('开始日期不能晚于结束日期'));
+      return;
+    }
+    start = String(startDate);
+    end = String(endDate);
+  } else {
+    ({ start, end } = getPeriod(type, date));
+  }
   const reportTypeName = type === 'weekly' ? '周报' : '月报';
 
   let logRows: any[];

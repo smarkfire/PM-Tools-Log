@@ -92,6 +92,8 @@ export const reportApi = {
     targetUserId?: number;
     projectId?: number;
     date?: string;
+    startDate?: string;
+    endDate?: string;
     provider?: string;
     promptId?: number;
   }) => request.post<Report>('/reports/generate', data),

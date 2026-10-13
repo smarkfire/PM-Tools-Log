@@ -146,12 +146,31 @@
           </el-select>
         </el-form-item>
 
-        <el-form-item :label="`基准日期（确定${typeLabel}周期）`">
+        <el-form-item label="周期模式">
+          <el-radio-group v-model="generateForm.periodMode">
+            <el-radio-button value="auto">按{{ typeLabel }}自动推算</el-radio-button>
+            <el-radio-button value="custom">自定义范围</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+
+        <el-form-item v-if="generateForm.periodMode === 'auto'" :label="`基准日期（确定${typeLabel}周期）`">
           <el-date-picker
             v-model="generateForm.date"
             type="date"
             value-format="YYYY-MM-DD"
             placeholder="选择周期内的任意日期"
+            style="width: 100%"
+          />
+        </el-form-item>
+
+        <el-form-item v-else label="日期范围">
+          <el-date-picker
+            v-model="generateForm.customRange"
+            type="daterange"
+            value-format="YYYY-MM-DD"
+            range-separator="至"
+            start-placeholder="开始日期"
+            end-placeholder="结束日期"
             style="width: 100%"
           />
         </el-form-item>
@@ -307,7 +326,9 @@ const generateForm = reactive({
   scope: 'personal' as 'personal' | 'project',
   projectId: undefined as number | undefined,
   targetUserId: undefined as number | undefined,
+  periodMode: 'auto' as 'auto' | 'custom',
   date: new Date().toISOString().slice(0, 10),
+  customRange: null as [string, string] | null,
   provider: 'qwen',
   promptId: undefined as number | undefined,
 });
@@ -415,7 +436,9 @@ function showGenerateDialog(type: 'weekly' | 'monthly') {
   generateForm.scope = 'personal';
   generateForm.projectId = undefined;
   generateForm.targetUserId = undefined;
+  generateForm.periodMode = 'auto';
   generateForm.date = new Date().toISOString().slice(0, 10);
+  generateForm.customRange = null;
   if (!providers.qwenConfigured && providers.deepseekConfigured) {
     generateForm.provider = 'deepseek';
   } else {
@@ -429,6 +452,16 @@ async function handleGenerate() {
     ElMessage.warning('请选择项目');
     return;
   }
+  let startDate: string | undefined;
+  let endDate: string | undefined;
+  if (generateForm.periodMode === 'custom') {
+    if (!generateForm.customRange || !generateForm.customRange[0] || !generateForm.customRange[1]) {
+      ElMessage.warning('请选择自定义日期范围');
+      return;
+    }
+    startDate = generateForm.customRange[0];
+    endDate = generateForm.customRange[1];
+  }
   generating.value = true;
   try {
     const res = await reportApi.generate({
@@ -436,7 +469,9 @@ async function handleGenerate() {
       scope: generateForm.scope,
       targetUserId: generateForm.targetUserId,
       projectId: generateForm.projectId,
-      date: generateForm.date,
+      date: generateForm.periodMode === 'auto' ? generateForm.date : undefined,
+      startDate,
+      endDate,
       provider: generateForm.provider,
       promptId: generateForm.promptId,
     });
