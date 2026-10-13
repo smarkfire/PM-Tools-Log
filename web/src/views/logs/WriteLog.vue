@@ -53,6 +53,36 @@
                   />
                 </el-form-item>
               </el-col>
+              <el-col v-if="form.projectId && projectGroups.length" :span="24">
+                <el-form-item label="涉及小组（跨组协作可多选，工时按组分配）">
+                  <el-select
+                    v-model="groupSelection"
+                    multiple
+                    collapse-tags
+                    collapse-tags-tooltip
+                    clearable
+                    placeholder="选择本篇日志涉及的小组（可选）"
+                    style="width: 100%"
+                  >
+                    <el-option v-for="g in projectGroups" :key="g.id" :label="g.name" :value="g.id" />
+                  </el-select>
+                  <div v-if="groupSelection.length" class="group-hours-list">
+                    <div v-for="gid in groupSelection" :key="gid" class="group-hours-row">
+                      <span class="group-hours-name">{{ groupNameOf(gid) }}</span>
+                      <el-input-number
+                        v-model="groupHoursMap[gid]"
+                        :min="0"
+                        :max="24"
+                        :step="0.5"
+                        size="small"
+                        controls-position="right"
+                      />
+                      <span class="group-hours-unit">h</span>
+                    </div>
+                    <div class="group-hours-tip">默认按总工时均摊到各组，可按实际投入修改</div>
+                  </div>
+                </el-form-item>
+              </el-col>
             </el-row>
 
             <el-form-item label="今日工作内容（可直接写流水账，稍后用 AI 优化）">
@@ -167,7 +197,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { logApi, projectApi, promptApi, chatApi } from '../../api';
@@ -202,6 +232,39 @@ const optimizedContent = ref('');
 const optimizing = ref(false);
 const saving = ref(false);
 
+// ===== 跨组协作：涉及小组多选 + 各组投入工时 =====
+const groupSelection = ref<number[]>([]);
+const groupHoursMap = reactive<Record<number, number | undefined>>({});
+
+// 当前所选项目下的小组（需为项目成员才可标记，由后端校验）
+const projectGroups = computed(() => {
+  const p = projects.value.find((item) => item.id === form.projectId);
+  return p?.groups || [];
+});
+
+function groupNameOf(gid: number): string {
+  return projectGroups.value.find((g) => g.id === gid)?.name || `小组#${gid}`;
+}
+
+// 切换项目时清空小组选择
+watch(
+  () => form.projectId,
+  () => {
+    groupSelection.value = [];
+    Object.keys(groupHoursMap).forEach((k) => delete groupHoursMap[Number(k)]);
+  }
+);
+
+// 新增勾选小组时按总工时均摊预填（已有的不覆盖，可手动修改）
+watch(groupSelection, (ids) => {
+  const n = ids.length;
+  if (!n) return;
+  const even = form.hours != null ? Math.round((form.hours / n) * 10) / 10 : undefined;
+  ids.forEach((id) => {
+    if (groupHoursMap[id] == null) groupHoursMap[id] = even;
+  });
+});
+
 onMounted(async () => {
   const [projectRes, promptRes, providerRes] = await Promise.all([
     projectApi.list(),
@@ -233,6 +296,16 @@ onMounted(async () => {
       form.content = existing.content;
       form.aiProvider = existing.ai_provider || '';
       optimizedContent.value = existing.optimized_content || '';
+      // 回填已标记的小组与各组工时
+      // nextTick：等 projectId 变化的 watcher（清空小组选择）先执行完毕
+      if (existing.group_marks?.length) {
+        nextTick(() => {
+          groupSelection.value = existing.group_marks!.map((m) => m.groupId);
+          existing.group_marks!.forEach((m) => {
+            groupHoursMap[m.groupId] = m.hours ?? undefined;
+          });
+        });
+      }
     }
   }
 });
@@ -276,6 +349,10 @@ async function handleSave() {
       optimizedContent: optimizedContent.value || undefined,
       aiProvider: form.aiProvider || undefined,
       hours: form.hours,
+      groups: groupSelection.value.map((gid) => ({
+        groupId: gid,
+        hours: groupHoursMap[gid] ?? null,
+      })),
     });
     ElMessage.success('日志保存成功');
     if (isEdit.value) {
@@ -342,5 +419,37 @@ async function handleSave() {
   color: #909399;
   text-align: center;
   margin-top: 8px;
+}
+
+/* 跨组协作：各小组工时分配 */
+.group-hours-list {
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: var(--el-fill-color-light);
+  border-radius: 6px;
+}
+
+.group-hours-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.group-hours-name {
+  flex: 1;
+  font-size: 13px;
+}
+
+.group-hours-unit {
+  font-size: 13px;
+  color: #909399;
+}
+
+.group-hours-tip {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #909399;
 }
 </style>

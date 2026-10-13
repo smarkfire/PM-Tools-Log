@@ -15,6 +15,74 @@ import { chat, AiProvider } from '../services/ai.service';
 import { getUserAiConfig } from '../services/config.service';
 import { getEffectivePrompt } from '../services/prompt.service';
 
+/** 日志的小组标记项（groupId + 该组投入工时） */
+interface LogGroupInput {
+  groupId: number;
+  hours?: number | null;
+}
+
+/**
+ * 校验日志的小组标记：
+ * - 必须关联项目；仅项目成员可标记
+ * - 所标记的小组必须属于该项目
+ */
+async function validateLogGroups(
+  userId: number,
+  projectId: number | null,
+  groups: LogGroupInput[]
+): Promise<string | null> {
+  if (!Array.isArray(groups) || groups.length === 0) return null;
+  if (!projectId) return '日志未关联项目，不能标记小组';
+  const isMember = await queryOne(
+    'SELECT 1 FROM project_members WHERE user_id = $1 AND project_id = $2',
+    [userId, projectId]
+  );
+  if (!isMember) return '仅项目成员可标记小组';
+  const ids = groups.map((g) => g.groupId);
+  if (ids.some((i) => typeof i !== 'number')) return '小组参数无效';
+  const valid = await queryMany<{ id: number }>(
+    'SELECT id FROM project_groups WHERE id = ANY($1::int[]) AND project_id = $2',
+    [ids, projectId]
+  );
+  if (valid.length !== new Set(ids).size) return '存在无效的小组（必须属于日志所选项目）';
+  return null;
+}
+
+/**
+ * 同步日志的小组标记（重建 work_log_groups 记录）
+ * 每组未填工时时按总工时均摊
+ */
+async function syncLogGroups(
+  logId: number,
+  groups: LogGroupInput[],
+  totalHours: number | null
+): Promise<void> {
+  await queryOne('DELETE FROM work_log_groups WHERE log_id = $1', [logId]);
+  if (!Array.isArray(groups) || groups.length === 0) return;
+  const n = groups.length;
+  for (const g of groups) {
+    const gh =
+      g.hours != null
+        ? g.hours
+        : totalHours != null
+          ? Math.round((totalHours / n) * 10) / 10
+          : null;
+    await queryOne('INSERT INTO work_log_groups (log_id, group_id, hours) VALUES ($1, $2, $3)', [
+      logId,
+      g.groupId,
+      gh,
+    ]);
+  }
+}
+
+/** 日志列表/详情通用的小组标记聚合子查询 */
+const GROUP_MARKS_SUBSQL = `COALESCE((
+    SELECT json_agg(json_build_object('groupId', wlg.group_id, 'groupName', pg.name, 'hours', wlg.hours) ORDER BY wlg.group_id)
+    FROM work_log_groups wlg
+    JOIN project_groups pg ON pg.id = wlg.group_id
+    WHERE wlg.log_id = wl.id
+  ), '[]'::json) AS group_marks`;
+
 /**
  * 查询日志列表（按数据权限过滤）
  * GET /api/logs?projectId=&userId=&startDate=&endDate=&keyword=&page=&pageSize=
@@ -26,10 +94,19 @@ export async function listLogs(req: Request, res: Response) {
   const conditions: string[] = [];
   const params: any[] = [];
 
-  // 数据权限过滤
+  // 数据权限过滤：权限内用户的日志 + 标记了我所辖小组的日志（跨组协作可见）
   if (scope.type !== 'all') {
-    params.push(scope.userIds);
-    conditions.push(`wl.user_id = ANY($${params.length}::int[])`);
+    if (scope.ledGroupIds && scope.ledGroupIds.length > 0) {
+      params.push(scope.userIds);
+      const userParamIdx = params.length;
+      params.push(scope.ledGroupIds);
+      conditions.push(
+        `(wl.user_id = ANY($${userParamIdx}::int[]) OR wl.id IN (SELECT log_id FROM work_log_groups WHERE group_id = ANY($${params.length}::int[])))`
+      );
+    } else {
+      params.push(scope.userIds);
+      conditions.push(`wl.user_id = ANY($${params.length}::int[])`);
+    }
   }
 
   const { projectId, userId, startDate, endDate, keyword, page, pageSize } = req.query;
@@ -38,11 +115,24 @@ export async function listLogs(req: Request, res: Response) {
     conditions.push(`wl.project_id = $${params.length}`);
   }
   if (userId) {
-    // 查看指定用户日志前先校验权限
+    // 查看指定用户日志前先校验权限（含跨组标记：对方有日志标记了我所辖小组即可按人筛选）
     const targetUserId = parseInt(userId as string, 10);
     if (targetUserId !== currentUserId && !(scope.userIds?.includes(targetUserId) || scope.type === 'all')) {
-      res.status(403).json(fail('无权限查看该用户的日志', 403));
-      return;
+      let crossGroupVisible = false;
+      if (scope.ledGroupIds && scope.ledGroupIds.length > 0) {
+        const marked = await queryOne(
+          `SELECT 1 FROM work_log_groups wlg
+           JOIN work_logs wl ON wl.id = wlg.log_id
+           WHERE wl.user_id = $1 AND wlg.group_id = ANY($2::int[])
+           LIMIT 1`,
+          [targetUserId, scope.ledGroupIds]
+        );
+        crossGroupVisible = !!marked;
+      }
+      if (!crossGroupVisible) {
+        res.status(403).json(fail('无权限查看该用户的日志', 403));
+        return;
+      }
     }
     params.push(targetUserId);
     conditions.push(`wl.user_id = $${params.length}`);
@@ -69,7 +159,8 @@ export async function listLogs(req: Request, res: Response) {
     params
   );
   const logs = await queryMany(
-    `SELECT wl.*, u.display_name AS user_name, u.username, p.name AS project_name
+    `SELECT wl.*, u.display_name AS user_name, u.username, p.name AS project_name,
+       ${GROUP_MARKS_SUBSQL}
      FROM work_logs wl
      JOIN users u ON u.id = wl.user_id
      LEFT JOIN projects p ON p.id = wl.project_id
@@ -90,7 +181,8 @@ export async function getLog(req: Request, res: Response) {
   const currentUserId = req.authUser!.id;
   const logId = parseInt(req.params.id, 10);
   const log = await queryOne(
-    `SELECT wl.*, u.display_name AS user_name, p.name AS project_name
+    `SELECT wl.*, u.display_name AS user_name, p.name AS project_name,
+       ${GROUP_MARKS_SUBSQL}
      FROM work_logs wl JOIN users u ON u.id = wl.user_id
      LEFT JOIN projects p ON p.id = wl.project_id
      WHERE wl.id = $1`,
@@ -102,8 +194,19 @@ export async function getLog(req: Request, res: Response) {
   }
   const scope = await getDataScope(currentUserId);
   if (scope.type !== 'all' && !scope.userIds?.includes(log.user_id)) {
-    res.status(403).json(fail('无权限查看该日志', 403));
-    return;
+    // 非权限内用户写的日志：若标记了我所辖的小组，仍可见（跨组协作）
+    let markedMine = false;
+    if (scope.ledGroupIds && scope.ledGroupIds.length > 0) {
+      const marked = await queryOne(
+        'SELECT 1 FROM work_log_groups WHERE log_id = $1 AND group_id = ANY($2::int[]) LIMIT 1',
+        [logId, scope.ledGroupIds]
+      );
+      markedMine = !!marked;
+    }
+    if (!markedMine) {
+      res.status(403).json(fail('无权限查看该日志', 403));
+      return;
+    }
   }
   res.json(success(log));
 }
@@ -115,10 +218,20 @@ export async function getLog(req: Request, res: Response) {
  */
 export async function saveLog(req: Request, res: Response) {
   const userId = req.authUser!.id;
-  const { logDate, projectId, content, optimizedContent, aiProvider, hours } = req.body || {};
+  const { logDate, projectId, content, optimizedContent, aiProvider, hours, groups } =
+    req.body || {};
   if (!logDate || !content?.trim()) {
     res.status(400).json(fail('日志日期和内容为必填项'));
     return;
+  }
+  // 小组标记校验（未传 groups 时不改动既有标记）
+  const groupsProvided = groups !== undefined;
+  if (groupsProvided) {
+    const groupErr = await validateLogGroups(userId, projectId || null, groups);
+    if (groupErr) {
+      res.status(400).json(fail(groupErr));
+      return;
+    }
   }
   const existing = await queryOne(
     'SELECT id FROM work_logs WHERE user_id = $1 AND log_date = $2',
@@ -154,6 +267,9 @@ export async function saveLog(req: Request, res: Response) {
        WHERE id = $6 RETURNING *`,
       [content, optimizedContent || null, aiProvider || null, hours || null, projectId || null, existing.id]
     );
+    if (groupsProvided) {
+      await syncLogGroups(existing.id, groups, hours ?? null);
+    }
     res.json(success(updated, '日志已更新'));
     return;
   }
@@ -162,6 +278,9 @@ export async function saveLog(req: Request, res: Response) {
      VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
     [userId, projectId || null, logDate, content, optimizedContent || null, aiProvider || null, hours || null]
   );
+  if (groupsProvided) {
+    await syncLogGroups(created!.id, groups, hours ?? null);
+  }
   res.json(success(created, '日志提交成功'));
 }
 
@@ -229,8 +348,17 @@ export async function logStats(req: Request, res: Response) {
   const params: any[] = [];
 
   if (scope.type !== 'all') {
-    params.push(scope.userIds);
-    conditions.push(`wl.user_id = ANY($${params.length}::int[])`);
+    if (scope.ledGroupIds && scope.ledGroupIds.length > 0) {
+      params.push(scope.userIds);
+      const userParamIdx = params.length;
+      params.push(scope.ledGroupIds);
+      conditions.push(
+        `(wl.user_id = ANY($${userParamIdx}::int[]) OR wl.id IN (SELECT log_id FROM work_log_groups WHERE group_id = ANY($${params.length}::int[])))`
+      );
+    } else {
+      params.push(scope.userIds);
+      conditions.push(`wl.user_id = ANY($${params.length}::int[])`);
+    }
   }
   const { projectId, startDate, endDate } = req.query;
   if (projectId) {

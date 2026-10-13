@@ -40,8 +40,8 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="groupName" label="所属小组" width="130">
-              <template #default="{ row }">{{ row.groupName || '-' }}</template>
+            <el-table-column label="所属小组" min-width="130" show-overflow-tooltip>
+              <template #default="{ row }">{{ memberGroupLabel(row) }}</template>
             </el-table-column>
             <el-table-column label="操作" v-if="canManage">
               <template #default="{ row }">
@@ -61,7 +61,7 @@
                     {{ roleLabel(m.projectRole) }}
                   </el-tag>
                 </div>
-                <div class="member-sub">{{ m.username }}{{ m.groupName ? ' · ' + m.groupName : '' }}</div>
+                <div class="member-sub">{{ m.username }}{{ memberGroupLabel(m) ? ' · ' + memberGroupLabel(m) : '' }}</div>
               </div>
               <div v-if="canManage" class="member-actions">
                 <el-button link type="primary" size="small" @click="showEditMember(m)">编辑</el-button>
@@ -159,8 +159,16 @@
             <el-option label="组员" value="member" />
           </el-select>
         </el-form-item>
-        <el-form-item label="所属小组（可选）">
-          <el-select v-model="addMemberForm.groupId" clearable placeholder="不分组" style="width: 100%">
+        <el-form-item label="所属小组（可多选，跨组协作）">
+          <el-select
+            v-model="addMemberForm.groupIds"
+            multiple
+            collapse-tags
+            collapse-tags-tooltip
+            clearable
+            placeholder="不分组"
+            style="width: 100%"
+          >
             <el-option v-for="g in project.groups" :key="g.id" :label="g.name" :value="g.id" />
           </el-select>
         </el-form-item>
@@ -181,8 +189,16 @@
             <el-option label="组员" value="member" />
           </el-select>
         </el-form-item>
-        <el-form-item label="所属小组">
-          <el-select v-model="editMemberForm.groupId" clearable placeholder="不分组" style="width: 100%">
+        <el-form-item label="所属小组（可多选，跨组协作）">
+          <el-select
+            v-model="editMemberForm.groupIds"
+            multiple
+            collapse-tags
+            collapse-tags-tooltip
+            clearable
+            placeholder="不分组"
+            style="width: 100%"
+          >
             <el-option v-for="g in project.groups" :key="g.id" :label="g.name" :value="g.id" />
           </el-select>
         </el-form-item>
@@ -261,7 +277,17 @@ function roleTagType(role: string) {
 }
 
 function memberCountOfGroup(groupId: number) {
-  return project.value?.members?.filter((m) => m.groupId === groupId).length || 0;
+  return (
+    project.value?.members?.filter((m) =>
+      m.groupIds?.length ? m.groupIds.includes(groupId) : m.groupId === groupId
+    ).length || 0
+  );
+}
+
+/** 成员的小组展示文本（多组时用顿号连接） */
+function memberGroupLabel(m: ProjectMember): string {
+  if (m.groupNames?.length) return m.groupNames.join('、');
+  return m.groupName || '';
 }
 
 // ==================== 项目信息编辑 ====================
@@ -288,17 +314,17 @@ const addMemberVisible = ref(false);
 const addingMember = ref(false);
 const availableUsers = ref<any[]>([]);
 const searchingUsers = ref(false);
-const addMemberForm = reactive({ userId: undefined as number | undefined, projectRole: 'member', groupId: undefined as number | undefined });
+const addMemberForm = reactive({ userId: undefined as number | undefined, projectRole: 'member', groupIds: [] as number[] });
 
 const editMemberVisible = ref(false);
 const updatingMember = ref(false);
 const editingMember = ref<ProjectMember | null>(null);
-const editMemberForm = reactive({ projectRole: 'member', groupId: undefined as number | undefined });
+const editMemberForm = reactive({ projectRole: 'member', groupIds: [] as number[] });
 
 function showAddMember() {
   addMemberForm.userId = undefined;
   addMemberForm.projectRole = 'member';
-  addMemberForm.groupId = undefined;
+  addMemberForm.groupIds = [];
   availableUsers.value = [];
   searchAvailableUsers('');
   addMemberVisible.value = true;
@@ -324,7 +350,7 @@ async function handleAddMember() {
     await projectApi.addMember(projectId.value, {
       userId: addMemberForm.userId,
       projectRole: addMemberForm.projectRole,
-      groupId: addMemberForm.groupId,
+      groupIds: addMemberForm.groupIds,
     });
     ElMessage.success('成员添加成功');
     addMemberVisible.value = false;
@@ -337,7 +363,12 @@ async function handleAddMember() {
 function showEditMember(member: ProjectMember) {
   editingMember.value = member;
   editMemberForm.projectRole = member.projectRole;
-  editMemberForm.groupId = member.groupId || undefined;
+  // 多组归属：优先用后端返回的 groupIds，兼容旧数据回退主组 groupId
+  editMemberForm.groupIds = member.groupIds?.length
+    ? [...member.groupIds]
+    : member.groupId
+      ? [member.groupId]
+      : [];
   editMemberVisible.value = true;
 }
 
@@ -347,7 +378,7 @@ async function handleUpdateMember() {
   try {
     await projectApi.updateMember(projectId.value, editingMember.value.userId, {
       projectRole: editMemberForm.projectRole,
-      groupId: editMemberForm.groupId ?? undefined,
+      groupIds: editMemberForm.groupIds,
     });
     ElMessage.success('成员信息已更新');
     editMemberVisible.value = false;

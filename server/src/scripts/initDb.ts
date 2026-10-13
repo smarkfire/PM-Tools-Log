@@ -79,6 +79,24 @@ CREATE TABLE IF NOT EXISTS work_logs (
   UNIQUE (user_id, log_date)
 );
 
+-- 项目小组成员多对多（一人可同时属于同项目的多个小组）
+CREATE TABLE IF NOT EXISTS project_group_members (
+  id         SERIAL PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  group_id   INTEGER NOT NULL REFERENCES project_groups(id) ON DELETE CASCADE,
+  UNIQUE (project_id, user_id, group_id)
+);
+
+-- 工作日志-小组多对多（一篇日志标记涉及的小组，并记录各小组分配的工时）
+CREATE TABLE IF NOT EXISTS work_log_groups (
+  id       SERIAL PRIMARY KEY,
+  log_id   INTEGER NOT NULL REFERENCES work_logs(id) ON DELETE CASCADE,
+  group_id INTEGER NOT NULL REFERENCES project_groups(id) ON DELETE CASCADE,
+  hours    NUMERIC(4,1), -- 该组在本日志中的投入工时（默认均摊，用户可修改）
+  UNIQUE (log_id, group_id)
+);
+
 -- 用户自定义提示词表
 CREATE TABLE IF NOT EXISTS user_prompts (
   id         SERIAL PRIMARY KEY,
@@ -203,6 +221,10 @@ CREATE INDEX IF NOT EXISTS idx_work_logs_user     ON work_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_work_logs_project  ON work_logs(project_id);
 CREATE INDEX IF NOT EXISTS idx_work_logs_date     ON work_logs(log_date);
 CREATE INDEX IF NOT EXISTS idx_project_members_user ON project_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_project_group_members_group ON project_group_members(group_id);
+CREATE INDEX IF NOT EXISTS idx_project_group_members_user  ON project_group_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_work_log_groups_log        ON work_log_groups(log_id);
+CREATE INDEX IF NOT EXISTS idx_work_log_groups_group      ON work_log_groups(group_id);
 CREATE INDEX IF NOT EXISTS idx_ai_messages_conv   ON ai_messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_user_prompts_user  ON user_prompts(user_id);
 CREATE INDEX IF NOT EXISTS idx_reports_project    ON reports(project_id);
@@ -350,6 +372,21 @@ WHERE NOT EXISTS (
   WHERE p.name = v.project_name AND u.username = v.username
 );
 
+-- 4.1 跨组成员示例：张三主属前端组，同时参与后端组（一人多组）
+INSERT INTO project_group_members (project_id, user_id, group_id)
+SELECT (SELECT id FROM projects WHERE name = '智慧园区平台'),
+       (SELECT id FROM users WHERE username = 'member1'),
+       (SELECT pg.id FROM project_groups pg
+        JOIN projects p ON p.id = pg.project_id
+        WHERE p.name = '智慧园区平台' AND pg.name = '后端组')
+WHERE NOT EXISTS (
+  SELECT 1 FROM project_group_members pgm
+  JOIN project_groups pg ON pg.id = pgm.group_id
+  JOIN projects p ON p.id = pgm.project_id
+  JOIN users u ON u.id = pgm.user_id
+  WHERE p.name = '智慧园区平台' AND u.username = 'member1' AND pg.name = '后端组'
+);
+
 -- 5. 工作日志（近两周）
 INSERT INTO work_logs (user_id, project_id, log_date, content, hours)
 SELECT (SELECT id FROM users WHERE username = v.username),
@@ -364,7 +401,7 @@ FROM (VALUES
   ('member1', '智慧园区平台', 4, '修复 3 个测试环境 bug；评审赵四的 PR；整理前端开发规范文档', 8.0),
   ('member1', '智慧园区平台', 7, '完成招商模块静态页；配合 UI 调整视觉细节', 8.0),
   ('member1', '智慧园区平台', 8, '开发大模型项目知识库前端页面，接入向量检索接口', 6.0),
-  ('member1', '智慧园区平台', 9, '智慧园区平台门禁模块集成测试；处理线上反馈 2 个问题', 8.0),
+  ('member1', '智慧园区平台', 9, '与后端组联调门禁设备接入协议；完成前端设备状态监控页；处理线上反馈 2 个问题', 8.0),
   ('member2', '智慧园区平台', 1, '编写访客预约模块后端接口；完成单元测试', 8.0),
   ('member2', '智慧园区平台', 2, '对接短信平台，访客到访通知上线；修复时区计算 bug', 8.5),
   ('member2', '智慧园区平台', 3, '数据库慢查询优化，访客列表接口耗时从 800ms 降至 120ms', 7.0),
@@ -401,6 +438,17 @@ WHERE NOT EXISTS (
   JOIN users u ON u.id = wl.user_id
   WHERE u.username = v.username AND wl.log_date = (CURRENT_DATE - v.days_ago)::date
 );
+
+-- 5.1 跨组日志示例：张三 9 天前的日志同时标记前端组(5h)与后端组(3h)
+INSERT INTO work_log_groups (log_id, group_id, hours)
+SELECT wl.id, pg.id, v.hours
+FROM (VALUES ('前端组', 5.0), ('后端组', 3.0)) AS v(group_name, hours)
+JOIN projects p ON p.name = '智慧园区平台'
+JOIN project_groups pg ON pg.project_id = p.id AND pg.name = v.group_name
+JOIN work_logs wl ON wl.project_id = p.id
+JOIN users u ON u.id = wl.user_id AND u.username = 'member1'
+WHERE wl.log_date = (CURRENT_DATE - 9)::date
+  AND NOT EXISTS (SELECT 1 FROM work_log_groups wlg WHERE wlg.log_id = wl.id);
 
 -- 6. 用户自定义提示词（演示：张三有一个自定义默认提示词）
 INSERT INTO user_prompts (user_id, type, name, content, is_default)
@@ -462,6 +510,16 @@ async function initDb() {
     ['$2a$10$1BL5GhWamsts6jroKlTMIOkSI8vu5mKZN8EMHGTqhqOAguJCYPWxW', DEMO_USERNAMES]
   );
   console.log(`演示账号密码已同步（影响 ${syncRes.rowCount} 行）`);
+
+  // 旧库迁移：将 project_members.group_id 回填到多组关系表
+  // （幂等；放在种子数据之后，保证首次初始化的主组归属也进入多组表）
+  await query(
+    `INSERT INTO project_group_members (project_id, user_id, group_id)
+     SELECT pm.project_id, pm.user_id, pm.group_id
+     FROM project_members pm
+     WHERE pm.group_id IS NOT NULL
+     ON CONFLICT (project_id, user_id, group_id) DO NOTHING`
+  );
 
   const res = await query('SELECT COUNT(*)::int AS cnt FROM users');
   console.log(`当前用户数: ${res.rows[0].cnt}`);

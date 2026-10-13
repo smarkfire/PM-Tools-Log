@@ -15,6 +15,31 @@ import {
   getVisibleProjectIds,
 } from '../services/permission.service';
 
+/** 归一化小组归属参数：支持单值 groupId（向后兼容）与多值 groupIds */
+function normalizeGroupIds(groupId?: number, groupIds?: number[]): number[] {
+  if (Array.isArray(groupIds)) return groupIds.filter((g) => typeof g === 'number');
+  if (groupId != null) return [groupId];
+  return [];
+}
+
+/**
+ * 同步某成员在某项目中的多组归属（重建 project_group_members 记录）
+ */
+async function syncGroupMembers(projectId: number, memberUserId: number, groupIds: number[]) {
+  await queryOne('DELETE FROM project_group_members WHERE project_id = $1 AND user_id = $2', [
+    projectId,
+    memberUserId,
+  ]);
+  for (const gid of groupIds) {
+    await queryOne(
+      `INSERT INTO project_group_members (project_id, user_id, group_id)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (project_id, user_id, group_id) DO NOTHING`,
+      [projectId, memberUserId, gid]
+    );
+  }
+}
+
 /**
  * 获取项目列表（按当前用户可见范围）
  * GET /api/projects
@@ -56,11 +81,37 @@ export async function listProjects(req: Request, res: Response) {
     'SELECT project_id, project_role FROM project_members WHERE user_id = $1',
     [userId]
   );
+  // 成员的多组归属（一人可属多个小组）
+  const groupMemberRows = await queryMany<{
+    project_id: number; user_id: number; group_id: number; group_name: string;
+  }>(
+    `SELECT pgm.project_id, pgm.user_id, pgm.group_id, pg.name AS group_name
+     FROM project_group_members pgm
+     JOIN project_groups pg ON pg.id = pgm.group_id`
+  );
+  const groupIdsMap = new Map<string, number[]>();
+  const groupNamesMap = new Map<string, string[]>();
+  for (const r of groupMemberRows) {
+    const key = `${r.project_id}:${r.user_id}`;
+    if (!groupIdsMap.has(key)) {
+      groupIdsMap.set(key, []);
+      groupNamesMap.set(key, []);
+    }
+    groupIdsMap.get(key)!.push(r.group_id);
+    groupNamesMap.get(key)!.push(r.group_name);
+  }
+
   const roleMap = new Map(memberships.map((m) => [m.project_id, m.project_role]));
   const result = projects.map((p) => ({
     ...p,
     groups: p.groups || [],
-    members: p.members || [],
+    members: (p.members || []).map((m: any) => {
+      const key = `${p.id}:${m.userId}`;
+      // 主组（project_members.group_id）优先；多组归属来自 project_group_members
+      const groupIds = groupIdsMap.get(key) || [];
+      const groupNames = groupNamesMap.get(key) || [];
+      return { ...m, groupIds, groupNames };
+    }),
     myRole: roleMap.get(p.id) || null,
   }));
   res.json(success(result));
@@ -139,7 +190,7 @@ export async function updateProject(req: Request, res: Response) {
 export async function addMember(req: Request, res: Response) {
   const userId = req.authUser!.id;
   const projectId = parseInt(req.params.id, 10);
-  const { userId: memberUserId, projectRole, groupId } = req.body || {};
+  const { userId: memberUserId, projectRole, groupId, groupIds } = req.body || {};
   if (!(await canManageProject(userId, projectId))) {
     res.status(403).json(fail('无权限：仅项目总监或该项目经理可管理成员', 403));
     return;
@@ -177,11 +228,14 @@ export async function addMember(req: Request, res: Response) {
     res.status(400).json(fail('该用户已是项目成员'));
     return;
   }
+  const normalized = normalizeGroupIds(groupId, groupIds);
+  const primaryGroupId = normalized.length > 0 ? normalized[0] : null;
   const member = await queryOne(
     `INSERT INTO project_members (project_id, user_id, project_role, group_id)
      VALUES ($1, $2, $3, $4) RETURNING *`,
-    [projectId, memberUserId, projectRole, groupId || null]
+    [projectId, memberUserId, projectRole, primaryGroupId]
   );
+  await syncGroupMembers(projectId, memberUserId, normalized);
   res.json(success(member, '成员添加成功'));
 }
 
@@ -193,7 +247,7 @@ export async function updateMember(req: Request, res: Response) {
   const userId = req.authUser!.id;
   const projectId = parseInt(req.params.id, 10);
   const memberUserId = parseInt(req.params.memberUserId, 10);
-  const { projectRole, groupId } = req.body || {};
+  const { projectRole, groupId, groupIds } = req.body || {};
   if (!(await canManageProject(userId, projectId))) {
     res.status(403).json(fail('无权限：仅项目总监或该项目经理可管理成员', 403));
     return;
@@ -220,12 +274,22 @@ export async function updateMember(req: Request, res: Response) {
       return;
     }
   }
+  // 小组归属：支持多选 groupIds（兼容旧的单值 groupId）；均未传时保持原状
+  const groupsProvided = Array.isArray(groupIds) || groupId !== undefined;
+  const normalized = groupsProvided ? normalizeGroupIds(groupId, groupIds) : null;
+  const newMainGroup = groupsProvided
+    ? normalized!.length > 0
+      ? normalized![0]
+      : null
+    : (member as any).group_id;
   const updated = await queryOne(
-    `UPDATE project_members SET project_role = COALESCE($1, project_role),
-       group_id = COALESCE($2, group_id)
+    `UPDATE project_members SET project_role = $1, group_id = $2
      WHERE project_id = $3 AND user_id = $4 RETURNING *`,
-    [projectRole || null, groupId === undefined ? member.group_id : groupId, projectId, memberUserId]
+    [projectRole || (member as any).project_role, newMainGroup, projectId, memberUserId]
   );
+  if (groupsProvided) {
+    await syncGroupMembers(projectId, memberUserId, normalized!);
+  }
   res.json(success(updated, '成员信息更新成功'));
 }
 
@@ -242,6 +306,10 @@ export async function removeMember(req: Request, res: Response) {
     return;
   }
   await queryOne('DELETE FROM project_members WHERE project_id = $1 AND user_id = $2', [
+    projectId,
+    memberUserId,
+  ]);
+  await queryOne('DELETE FROM project_group_members WHERE project_id = $1 AND user_id = $2', [
     projectId,
     memberUserId,
   ]);
@@ -268,12 +336,17 @@ export async function createGroup(req: Request, res: Response) {
     `INSERT INTO project_groups (project_id, name, leader_id) VALUES ($1, $2, $3) RETURNING *`,
     [projectId, name.trim(), leaderId || null]
   );
-  // 若指定了组长且其为项目成员，则同步其项目角色为 leader 并归入该组
+  // 若指定了组长且其为项目成员，则同步其项目角色为 leader 并归入该组（含多组关系）
   if (leaderId) {
     await queryOne(
       `UPDATE project_members SET project_role = 'leader', group_id = $1
        WHERE project_id = $2 AND user_id = $3`,
       [group!.id, projectId, leaderId]
+    );
+    await queryOne(
+      `INSERT INTO project_group_members (project_id, user_id, group_id)
+       VALUES ($1, $2, $3) ON CONFLICT (project_id, user_id, group_id) DO NOTHING`,
+      [projectId, leaderId, group!.id]
     );
   }
   res.json(success(group, '小组创建成功'));

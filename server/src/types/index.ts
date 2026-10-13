@@ -16,6 +16,8 @@ export interface DataScope {
   userIds: number[] | null;
   /** 有权访问的项目ID列表（all 时为 null） */
   projectIds: number[] | null;
+  /** 我担任组长的小组ID列表（用于跨组标记日志的可见性判断） */
+  ledGroupIds: number[];
 }
 
 /** 请求中挂载的用户信息 */

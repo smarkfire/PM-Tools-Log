@@ -59,6 +59,16 @@ export interface ProjectMember {
   projectRole: ProjectRole;
   groupId: number | null;
   groupName: string | null;
+  /** 多组归属（一人可同时属于多个小组） */
+  groupIds?: number[];
+  groupNames?: string[];
+}
+
+/** 日志的小组标记（含该组投入工时） */
+export interface LogGroupMark {
+  groupId: number;
+  groupName?: string;
+  hours?: number | null;
 }
 
 export interface WorkLog {
@@ -75,6 +85,8 @@ export interface WorkLog {
   user_name?: string;
   username?: string;
   project_name?: string;
+  /** 涉及的小组标记（跨组协作） */
+  group_marks?: LogGroupMark[];
 }
 
 export interface LogStats {

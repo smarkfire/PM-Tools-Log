@@ -19,14 +19,15 @@ export async function getDataScope(userId: number): Promise<DataScope> {
   // 1. 项目总监：全部数据
   const user = await queryOne<{ role: GlobalRole }>('SELECT role FROM users WHERE id = $1', [userId]);
   if (!user) {
-    return { type: 'self', userIds: [userId], projectIds: [] };
+    return { type: 'self', userIds: [userId], projectIds: [], ledGroupIds: [] };
   }
   if (user.role === 'director') {
-    return { type: 'all', userIds: null, projectIds: null };
+    return { type: 'all', userIds: null, projectIds: null, ledGroupIds: [] };
   }
 
   const userIds = new Set<number>([userId]); // 永远可以看到自己的数据
   const projectIds = new Set<number>();
+  const ledGroupIds: number[] = [];
   let hasProjectScope = false;
 
   // 2. 作为项目经理：管辖项目内全部成员
@@ -45,19 +46,31 @@ export async function getDataScope(userId: number): Promise<DataScope> {
     members.forEach((m) => userIds.add(m.user_id));
   }
 
-  // 3. 作为小组长：项目内本小组的成员
+  // 3. 作为小组长：所辖小组的成员（支持一人多组，取并集）
+  //    所辖小组 = 项目角色为 leader 的主组 ∪ project_groups.leader_id 指向的组
   const ledGroups = await queryMany<{ group_id: number; project_id: number }>(
-    `SELECT DISTINCT pm.group_id, pm.project_id
-     FROM project_members pm
-     JOIN project_groups pg ON pg.id = pm.group_id
-     WHERE pm.user_id = $1 AND pm.project_role = 'leader' AND pm.group_id IS NOT NULL`,
+    `SELECT DISTINCT g.group_id, g.project_id FROM (
+       SELECT DISTINCT pm.group_id, pm.project_id
+       FROM project_members pm
+       WHERE pm.user_id = $1 AND pm.project_role = 'leader' AND pm.group_id IS NOT NULL
+       UNION
+       SELECT DISTINCT pg.id AS group_id, pg.project_id
+       FROM project_groups pg
+       WHERE pg.leader_id = $1
+     ) g`,
     [userId]
   );
   if (ledGroups.length > 0) {
     const gids = ledGroups.map((g) => g.group_id);
+    gids.forEach((g) => ledGroupIds.push(g));
     ledGroups.forEach((g) => projectIds.add(g.project_id));
+    // 组成员来自多组关系表；兼容未迁移的旧数据（project_members.group_id）
     const groupMembers = await queryMany<{ user_id: number }>(
-      `SELECT DISTINCT user_id FROM project_members WHERE group_id = ANY($1::int[])`,
+      `SELECT DISTINCT user_id FROM (
+         SELECT user_id FROM project_group_members WHERE group_id = ANY($1::int[])
+         UNION
+         SELECT user_id FROM project_members WHERE group_id = ANY($1::int[])
+       ) m`,
       [gids]
     );
     groupMembers.forEach((m) => userIds.add(m.user_id));
@@ -66,11 +79,11 @@ export async function getDataScope(userId: number): Promise<DataScope> {
   if (hasProjectScope || ledGroups.length > 0) {
     // 若管理了完整项目则范围类型为 project，否则为 group
     const type = managedProjects.length > 0 ? 'project' : 'group';
-    return { type, userIds: [...userIds], projectIds: [...projectIds] };
+    return { type, userIds: [...userIds], projectIds: [...projectIds], ledGroupIds };
   }
 
   // 4. 普通成员：仅自己
-  return { type: 'self', userIds: [userId], projectIds: [] };
+  return { type: 'self', userIds: [userId], projectIds: [], ledGroupIds: [] };
 }
 
 /**

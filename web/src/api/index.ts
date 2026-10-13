@@ -42,10 +42,15 @@ export const projectApi = {
   create: (data: { name: string; description?: string; startDate?: string; endDate?: string }) =>
     request.post('/projects', data),
   update: (id: number, data: Partial<Project>) => request.put(`/projects/${id}`, data),
-  addMember: (projectId: number, data: { userId: number; projectRole: string; groupId?: number }) =>
-    request.post(`/projects/${projectId}/members`, data),
-  updateMember: (projectId: number, memberUserId: number, data: { projectRole?: string; groupId?: number }) =>
-    request.put(`/projects/${projectId}/members/${memberUserId}`, data),
+  addMember: (
+    projectId: number,
+    data: { userId: number; projectRole: string; groupId?: number; groupIds?: number[] }
+  ) => request.post(`/projects/${projectId}/members`, data),
+  updateMember: (
+    projectId: number,
+    memberUserId: number,
+    data: { projectRole?: string; groupId?: number; groupIds?: number[] }
+  ) => request.put(`/projects/${projectId}/members/${memberUserId}`, data),
   removeMember: (projectId: number, memberUserId: number) =>
     request.delete(`/projects/${projectId}/members/${memberUserId}`),
   createGroup: (projectId: number, data: { name: string; leaderId?: number }) =>
@@ -76,6 +81,8 @@ export const logApi = {
     optimizedContent?: string;
     aiProvider?: string;
     hours?: number;
+    /** 涉及的小组标记（每组含投入工时，未填时后端按总工时均摊） */
+    groups?: { groupId: number; hours?: number | null }[];
   }) => request.post('/logs', data),
   remove: (id: number) => request.delete(`/logs/${id}`),
   optimize: (data: { content: string; provider: string; promptId?: number }) =>
@@ -96,6 +103,8 @@ export const reportApi = {
     endDate?: string;
     provider?: string;
     promptId?: number;
+    /** 项目报告呈现方式：group=按小组分组（默认），flat=汇总平铺 */
+    groupBy?: 'group' | 'flat';
   }) => request.post<Report>('/reports/generate', data),
   list: (params: { type?: string; scope?: string; projectId?: number; page?: number; pageSize?: number }) =>
     request.get<{ list: Report[]; total: number }>('/reports', { params }),

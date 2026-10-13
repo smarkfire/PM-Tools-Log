@@ -39,6 +39,112 @@ function fmt(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+/** pg 返回 DATE 为 Date 对象，统一格式化为 YYYY-MM-DD 字符串 */
+function fmtDay(v: unknown): string {
+  return v instanceof Date ? fmt(v) : String(v);
+}
+
+/**
+ * 按小组组织项目日志上下文（项目报告"按小组分组"模式）
+ * 归属规则：日志显式标记（work_log_groups）优先；未标记时回退到作者所属小组（均摊工时）
+ * 各组工时：优先用标记时填写的分组工时；无标记回退时按所属组数均摊
+ */
+export async function buildGroupedLogContext(projectId: number, logRows: any[]): Promise<string> {
+  const groups = await queryMany<{ id: number; name: string; leader_name: string | null }>(
+    `SELECT pg.id, pg.name, u.display_name AS leader_name
+     FROM project_groups pg LEFT JOIN users u ON u.id = pg.leader_id
+     WHERE pg.project_id = $1 ORDER BY pg.id`,
+    [projectId]
+  );
+
+  type Mark = { group_id: number; group_name: string; hours: number | null };
+  const logIds = logRows.map((l) => l.id);
+  const marksByLog = new Map<number, Mark[]>();
+  if (logIds.length > 0) {
+    const marks = await queryMany<Mark & { log_id: number }>(
+      `SELECT wlg.log_id, wlg.group_id, wlg.hours, pg.name AS group_name
+       FROM work_log_groups wlg JOIN project_groups pg ON pg.id = wlg.group_id
+       WHERE wlg.log_id = ANY($1::int[])`,
+      [logIds]
+    );
+    marks.forEach((m) => {
+      if (!marksByLog.has(m.log_id)) marksByLog.set(m.log_id, []);
+      marksByLog.get(m.log_id)!.push({ group_id: m.group_id, group_name: m.group_name, hours: m.hours });
+    });
+  }
+
+  // 未标记日志的回退归属：作者在该项目所属的小组
+  const authorIds = [...new Set(logRows.map((l) => l.user_id))];
+  const authorGroups = authorIds.length
+    ? await queryMany<{ user_id: number; group_id: number; group_name: string }>(
+        `SELECT pgm.user_id, pgm.group_id, pg.name AS group_name
+         FROM project_group_members pgm JOIN project_groups pg ON pg.id = pgm.group_id
+         WHERE pgm.project_id = $1 AND pgm.user_id = ANY($2::int[])`,
+        [projectId, authorIds]
+      )
+    : [];
+  const authorGroupsByUser = new Map<number, { group_id: number; group_name: string }[]>();
+  authorGroups.forEach((ag) => {
+    if (!authorGroupsByUser.has(ag.user_id)) authorGroupsByUser.set(ag.user_id, []);
+    authorGroupsByUser.get(ag.user_id)!.push({ group_id: ag.group_id, group_name: ag.group_name });
+  });
+
+  // 初始化各小组的内容桶
+  const buckets = new Map<number, { name: string; leader: string | null; lines: string[]; hours: number }>();
+  groups.forEach((g) => buckets.set(g.id, { name: g.name, leader: g.leader_name, lines: [], hours: 0 }));
+  const ungroupedLines: string[] = [];
+  let ungroupedHours = 0;
+
+  // pg 返回 NUMERIC 为字符串，统一转为 number 再累加
+  const num = (v: unknown): number => (v == null ? 0 : Number(v));
+
+  const logLine = (l: any, h: number | null, hourLabel = '本组工时') =>
+    `- [${fmtDay(l.log_date)}] ${l.display_name}${h != null ? `（${hourLabel} ${h}h）` : ''}：\n  ${(
+      l.optimized_content || l.content
+    ).replace(/\n/g, '\n  ')}`;
+
+  for (const l of logRows) {
+    const marks = marksByLog.get(l.id) || [];
+    let eff: { group_id: number; hours: number | null }[];
+    if (marks.length > 0) {
+      eff = marks.map((m) => ({ group_id: m.group_id, hours: m.hours == null ? null : num(m.hours) }));
+    } else {
+      const ag = authorGroupsByUser.get(l.user_id) || [];
+      eff = ag.map((g) => ({
+        group_id: g.group_id,
+        hours: ag.length > 0 && l.hours != null ? Math.round((num(l.hours) / ag.length) * 10) / 10 : null,
+      }));
+    }
+    if (eff.length === 0) {
+      ungroupedLines.push(logLine(l, l.hours == null ? null : num(l.hours), '工时'));
+      ungroupedHours += num(l.hours);
+      continue;
+    }
+    for (const e of eff) {
+      const b = buckets.get(e.group_id);
+      if (!b) continue; // 小组可能已被删除，忽略残留标记
+      b.lines.push(logLine(l, e.hours));
+      b.hours += num(e.hours);
+    }
+  }
+
+  const parts: string[] = [];
+  for (const g of groups) {
+    const b = buckets.get(g.id)!;
+    const header = `### ${g.name}（组长：${g.leader_name || '未指定'}｜本期投入 ${b.hours.toFixed(1)}h）`;
+    parts.push(b.lines.length ? `${header}\n${b.lines.join('\n')}` : `${header}\n（本期无日志）`);
+  }
+  if (ungroupedLines.length > 0) {
+    parts.push(`### 未分组（项目整体/无小组归属，本期投入 ${ungroupedHours.toFixed(1)}h）\n${ungroupedLines.join('\n')}`);
+  }
+
+  const emptyGroups = groups.filter((g) => buckets.get(g.id)!.lines.length === 0).map((g) => g.name);
+  if (emptyGroups.length > 0) {
+    parts.push(`【提醒】以下小组本期没有任何工作日志：${emptyGroups.join('、')}`);
+  }
+  return parts.join('\n\n');
+}
+
 /**
  * 生成报告
  * POST /api/reports/generate
@@ -48,7 +154,8 @@ function fmt(d: Date): string {
  */
 export async function generateReport(req: Request, res: Response) {
   const currentUserId = req.authUser!.id;
-  const { type, scope, targetUserId, projectId, date, startDate, endDate, provider, promptId } = req.body || {};
+  const { type, scope, targetUserId, projectId, date, startDate, endDate, provider, promptId, groupBy } =
+    req.body || {};
   if (!['weekly', 'monthly'].includes(type) || !['personal', 'project'].includes(scope)) {
     res.status(400).json(fail('无效的报告类型或范围'));
     return;
@@ -112,7 +219,7 @@ export async function generateReport(req: Request, res: Response) {
       return;
     }
     logRows = await queryMany(
-      `SELECT wl.log_date, wl.content, wl.optimized_content, wl.hours, p.name AS project_name, u.display_name
+      `SELECT wl.id, wl.user_id, wl.log_date, wl.content, wl.optimized_content, wl.hours, p.name AS project_name, u.display_name
        FROM work_logs wl
        JOIN users u ON u.id = wl.user_id
        LEFT JOIN projects p ON p.id = wl.project_id
@@ -130,12 +237,19 @@ export async function generateReport(req: Request, res: Response) {
   }
 
   // 组装日志上下文（优先使用优化后内容）
-  const logContext = logRows
-    .map(
-      (l) =>
-        `- [${l.log_date}] ${l.display_name || ''} ${l.project_name ? `(${l.project_name})` : ''} 工时:${l.hours || '-'}h\n  ${(l.optimized_content || l.content).replace(/\n/g, '\n  ')}`
-    )
-    .join('\n');
+  // 项目报告支持"按小组分组"模式：按小组分节组织，含各组工时与空组提醒
+  const useGroupBy = scope === 'project' && groupBy === 'group';
+  let logContext: string;
+  if (useGroupBy) {
+    logContext = await buildGroupedLogContext(parseInt(projectId, 10), logRows);
+  } else {
+    logContext = logRows
+      .map(
+        (l) =>
+          `- [${fmtDay(l.log_date)}] ${l.display_name || ''} ${l.project_name ? `(${l.project_name})` : ''} 工时:${l.hours || '-'}h\n  ${(l.optimized_content || l.content).replace(/\n/g, '\n  ')}`
+      )
+      .join('\n');
+  }
 
   // 提示词优先级：指定 promptId > 用户默认 > 系统默认
   const basePrompt = await getEffectivePrompt(currentUserId, 'report', promptId);
@@ -147,7 +261,13 @@ export async function generateReport(req: Request, res: Response) {
     ? basePrompt.replace('{REPORT_TYPE}', reportTypeName)
     : basePrompt;
 
-  const userMessage = `请生成 ${titlePrefix}${reportTypeName}（周期：${start} 至 ${end}）。\n\n${logContext}`;
+  const userMessage = useGroupBy
+    ? `请生成 ${titlePrefix}${reportTypeName}（周期：${start} 至 ${end}）。\n\n` +
+      `报告组织要求：请严格按下方的小组结构组织内容——先给出项目整体概述（总工时、整体进展与成果），` +
+      `然后每个小组一节（本组本周工作、进展评估、风险与下周重点，注明各组投入工时），` +
+      `最后单独列出"本期无日志的小组"（如有）。日志已按小组归类、工时已按组分配（跨组协作的日志会出现在多个组中）。\n\n` +
+      `各小组工作日志如下：\n\n${logContext}`
+    : `请生成 ${titlePrefix}${reportTypeName}（周期：${start} 至 ${end}）。\n\n${logContext}`;
 
   // Key 优先级：用户自己的 > 系统配置 > .env
   const userAiConfig = await getUserAiConfig(currentUserId);

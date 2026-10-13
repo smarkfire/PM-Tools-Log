@@ -175,6 +175,16 @@
           />
         </el-form-item>
 
+        <el-form-item v-if="generateForm.scope === 'project'" label="呈现方式">
+          <el-radio-group v-model="generateForm.groupBy">
+            <el-radio-button value="group">按小组分组</el-radio-button>
+            <el-radio-button value="flat">汇总平铺</el-radio-button>
+          </el-radio-group>
+          <div class="form-tip" v-if="generateForm.groupBy === 'group'">
+            报告将按项目小组分节展示各组工作、投入工时与风险，并列出本期无日志的小组
+          </div>
+        </el-form-item>
+
         <el-form-item label="AI 引擎">
           <el-radio-group v-model="generateForm.provider">
             <el-radio-button value="qwen" :disabled="!providers.qwenConfigured">通义千问</el-radio-button>
@@ -329,6 +339,8 @@ const generateForm = reactive({
   periodMode: 'auto' as 'auto' | 'custom',
   date: new Date().toISOString().slice(0, 10),
   customRange: null as [string, string] | null,
+  /** 项目报告呈现方式：group=按小组分组，flat=汇总平铺 */
+  groupBy: 'group' as 'group' | 'flat',
   provider: 'qwen',
   promptId: undefined as number | undefined,
 });
@@ -439,6 +451,7 @@ function showGenerateDialog(type: 'weekly' | 'monthly') {
   generateForm.periodMode = 'auto';
   generateForm.date = new Date().toISOString().slice(0, 10);
   generateForm.customRange = null;
+  generateForm.groupBy = 'group';
   if (!providers.qwenConfigured && providers.deepseekConfigured) {
     generateForm.provider = 'deepseek';
   } else {
@@ -474,6 +487,7 @@ async function handleGenerate() {
       endDate,
       provider: generateForm.provider,
       promptId: generateForm.promptId,
+      groupBy: generateForm.scope === 'project' ? generateForm.groupBy : undefined,
     });
     ElMessage.success('报告生成成功');
     generateVisible.value = false;
@@ -648,5 +662,14 @@ onMounted(async () => {
 
 .report-content :deep(li) {
   margin-left: 20px;
+}
+
+/* 生成对话框提示 */
+.form-tip {
+  width: 100%;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.5;
 }
 </style>
