@@ -85,7 +85,17 @@
                       />
                       <span class="group-hours-unit">h</span>
                     </div>
-                    <div class="group-hours-tip">默认按总工时均摊到各组，可按实际投入修改</div>
+                    <div
+                      class="group-hours-tip"
+                      :class="{ 'group-hours-exceed': groupHoursExceeded }"
+                    >
+                      <template v-if="groupHoursExceeded">
+                        各小组工时之和（{{ groupHoursSum }}h）已超过当天总工时（{{ form.hours ?? 0 }}h），请调整
+                      </template>
+                      <template v-else>
+                        默认按总工时均摊到各组，可按实际投入修改；已分配 {{ groupHoursSum }}h / {{ form.hours ?? 0 }}h
+                      </template>
+                    </div>
                   </div>
                 </el-form-item>
               </el-col>
@@ -187,7 +197,7 @@
             size="large"
             style="width: 100%"
             :loading="saving"
-            :disabled="!form.content?.trim() || !form.projectId"
+            :disabled="!form.content?.trim() || !form.projectId || groupHoursExceeded"
             @click="handleSave"
           >
             <el-icon><Check /></el-icon>
@@ -279,6 +289,23 @@ watch(groupSelection, (ids) => {
   });
 });
 
+// 各小组工时之和（未填写的按总工时均摊估算，与保存逻辑一致）
+const groupHoursSum = computed(() => {
+  const n = groupSelection.value.length;
+  if (!n) return 0;
+  const even = form.hours != null ? Math.round((form.hours / n) * 10) / 10 : 0;
+  const sum = groupSelection.value.reduce(
+    (s, gid) => s + (groupHoursMap[gid] != null ? (groupHoursMap[gid] as number) : even),
+    0
+  );
+  return Math.round(sum * 10) / 10;
+});
+
+// 校验：各小组工时之和不能大于当天总工时
+const groupHoursExceeded = computed(
+  () => groupSelection.value.length > 0 && groupHoursSum.value > (form.hours ?? 0)
+);
+
 onMounted(async () => {
   const [projectRes, promptRes, providerRes] = await Promise.all([
     projectApi.list(),
@@ -360,6 +387,12 @@ async function handleSave() {
   }
   if (!form.logDate) {
     ElMessage.warning('请选择日志日期');
+    return;
+  }
+  if (groupHoursExceeded.value) {
+    ElMessage.warning(
+      `各小组工时之和（${groupHoursSum.value}h）不能大于当天总工时（${form.hours ?? 0}h）`
+    );
     return;
   }
   saving.value = true;
@@ -473,5 +506,10 @@ async function handleSave() {
   margin-top: 4px;
   font-size: 12px;
   color: #909399;
+}
+
+.group-hours-exceed {
+  color: #f56c6c;
+  font-weight: 500;
 }
 </style>

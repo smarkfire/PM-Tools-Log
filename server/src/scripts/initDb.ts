@@ -36,7 +36,6 @@ CREATE TABLE IF NOT EXISTS projects (
   id          SERIAL PRIMARY KEY,
   name        VARCHAR(100) NOT NULL,
   description TEXT,
-  team_intro  TEXT,
   status      VARCHAR(20)  NOT NULL DEFAULT 'active', -- active / archived
   created_by  INTEGER     NOT NULL REFERENCES users(id),
   start_date  DATE,
@@ -464,9 +463,6 @@ async function initDb() {
   console.log('开始初始化数据库...');
   await query(CREATE_TABLES_SQL);
   console.log('所有表创建完成');
-
-  // 旧库迁移：projects 增加团队介绍列（幂等，新库已含则跳过）
-  await query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS team_intro TEXT`);
 
   // 种子数据（幂等插入，显式类型转换避免参数类型推导不一致）
   for (const p of SYSTEM_PROMPT_SEEDS) {

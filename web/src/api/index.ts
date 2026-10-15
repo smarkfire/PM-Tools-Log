@@ -39,9 +39,9 @@ export const userApi = {
 // ==================== 项目 ====================
 export const projectApi = {
   list: () => request.get<Project[]>('/projects'),
-  create: (data: { name: string; description?: string; teamIntro?: string; startDate?: string; endDate?: string }) =>
+  create: (data: { name: string; description?: string; startDate?: string; endDate?: string }) =>
     request.post('/projects', data),
-  update: (id: number, data: Partial<Project> & { teamIntro?: string }) => request.put(`/projects/${id}`, data),
+  update: (id: number, data: Partial<Project>) => request.put(`/projects/${id}`, data),
   addMember: (
     projectId: number,
     data: { userId: number; projectRole: string; groupId?: number; groupIds?: number[] }

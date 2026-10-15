@@ -33,8 +33,6 @@ export interface Project {
   id: number;
   name: string;
   description: string | null;
-  /** 团队介绍（支持 Markdown） */
-  team_intro: string | null;
   status: string;
   created_by: number;
   start_date: string | null;

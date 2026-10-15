@@ -232,6 +232,19 @@ export async function saveLog(req: Request, res: Response) {
       res.status(400).json(fail(groupErr));
       return;
     }
+    // 各小组工时之和不能大于当天总工时（未填写的组按总工时均摊估算，与保存逻辑一致）
+    const n = (groups as LogGroupInput[]).length;
+    if (n > 0 && typeof hours === 'number') {
+      const even = Math.round((hours / n) * 10) / 10;
+      const sum = (groups as LogGroupInput[]).reduce(
+        (s, g) => s + (typeof g.hours === 'number' ? g.hours : even),
+        0
+      );
+      if (Math.round(sum * 10) / 10 > hours) {
+        res.status(400).json(fail(`各小组工时之和（${Math.round(sum * 10) / 10}h）不能大于当天总工时（${hours}h）`));
+        return;
+      }
+    }
   }
   const existing = await queryOne(
     'SELECT id FROM work_logs WHERE user_id = $1 AND log_date = $2',
