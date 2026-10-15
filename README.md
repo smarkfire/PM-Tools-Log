@@ -165,6 +165,12 @@ npm run init-db
 > psql -h localhost -U logadmin -d logdb -f server/sql/02_seed_demo.sql
 > ```
 > 两个脚本均可重复执行（自动跳过已存在的数据）。
+>
+> **从 v1.0.0 旧版本升级**：已有 v1.0.0 部署的数据库请先执行升级脚本（无需重跑建库脚本）：
+> ```bash
+> psql -h localhost -U logadmin -d logdb -f server/sql/upgrade_v1.0_to_v1.1.sql
+> ```
+> 各版本功能变化见 [docs/version-history.md](docs/version-history.md)。
 
 #### 3.4 启动后端
 
