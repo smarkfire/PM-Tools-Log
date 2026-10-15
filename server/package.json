@@ -1,5 +1,5 @@
 {
-  "name": "log-management-server",
+  "name": "logmate-server",
   "version": "1.0.0",
   "description": "日志管理系统后端 - Express + TypeScript + PostgreSQL",
   "main": "dist/index.js",

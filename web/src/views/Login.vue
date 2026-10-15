@@ -7,9 +7,9 @@
     <div class="login-card">
       <div class="login-header">
         <div class="logo-mark">
-          <el-icon :size="24" color="#fff"><Notebook /></el-icon>
+          <LogoMark :size="26" color="#fff" />
         </div>
-        <h1>日志管理系统</h1>
+        <h1>LogMate 络脉</h1>
         <p class="subtitle">项目日志 · AI 优化 · 智能报告</p>
       </div>
 
@@ -46,7 +46,8 @@
 import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { User, Lock, Notebook } from '@element-plus/icons-vue';
+import { User, Lock } from '@element-plus/icons-vue';
+import LogoMark from '../components/LogoMark.vue';
 import { useUserStore } from '../stores/user';
 
 const router = useRouter();

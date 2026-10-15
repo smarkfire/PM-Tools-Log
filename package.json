@@ -1,5 +1,5 @@
 {
-  "name": "pm-tools-log",
+  "name": "logmate",
   "version": "1.0.0",
   "private": true,
   "description": "日志管理系统（Vercel 部署用根依赖，供 api/ Serverless Function 构建）",

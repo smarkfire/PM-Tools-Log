@@ -127,7 +127,7 @@ const router = createRouter({
 
 // 路由守卫：登录校验 + 角色校验
 router.beforeEach(async (to, _from, next) => {
-  document.title = `${to.meta.title || ''} - 日志管理系统`;
+  document.title = `${to.meta.title || ''} - LogMate 络脉`;
   const userStore = useUserStore();
 
   // 公开页面直接放行

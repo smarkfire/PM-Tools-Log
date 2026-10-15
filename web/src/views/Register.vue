@@ -6,10 +6,10 @@
     <div class="login-card">
       <div class="login-header">
         <div class="logo-mark">
-          <el-icon :size="24" color="#fff"><Notebook /></el-icon>
+          <LogoMark :size="26" color="#fff" />
         </div>
         <h1>注册账号</h1>
-        <p class="subtitle">加入日志管理系统</p>
+        <p class="subtitle">加入 LogMate 络脉，记录每一天</p>
       </div>
 
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top" size="large">
@@ -65,7 +65,8 @@
 import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { User, Lock, Message, Avatar, Notebook } from '@element-plus/icons-vue';
+import { User, Lock, Message, Avatar } from '@element-plus/icons-vue';
+import LogoMark from '../components/LogoMark.vue';
 import { useUserStore } from '../stores/user';
 
 const router = useRouter();

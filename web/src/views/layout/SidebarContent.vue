@@ -2,9 +2,9 @@
   <div class="sidebar-content">
     <div class="logo-area" @click="$router.push('/dashboard')">
       <div class="logo-mark">
-        <el-icon :size="20" color="#fff"><Notebook /></el-icon>
+        <LogoMark :size="20" color="#fff" />
       </div>
-      <span v-if="!collapsed" class="logo-text">日志管理系统</span>
+      <span v-if="!collapsed" class="logo-text">LogMate 络脉</span>
     </div>
 
     <el-menu
@@ -96,6 +96,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
+import LogoMark from '../../components/LogoMark.vue';
 import { useUserStore } from '../../stores/user';
 import { useConfigStore } from '../../stores/config';
 import { notificationApi } from '../../api';
