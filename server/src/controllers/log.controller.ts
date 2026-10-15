@@ -315,13 +315,10 @@ export async function deleteLog(req: Request, res: Response) {
     res.status(403).json(fail('只能删除自己的日志'));
     return;
   }
-  // 本周以前的日志不可删除（项目总监/系统管理员除外，与跨周编辑规则一致）
+  // 本周以前的日志永远不能删除（任何角色，含项目总监/系统管理员）
   if (!log.in_week) {
-    const meRole = await queryOne<{ role: string }>('SELECT role FROM users WHERE id = $1', [userId]);
-    if (meRole?.role !== 'director' && meRole?.role !== 'admin') {
-      res.status(400).json(fail('本周以前填写的日志不能删除'));
-      return;
-    }
+    res.status(400).json(fail('本周以前填写的日志不能删除'));
+    return;
   }
   await queryOne('DELETE FROM work_logs WHERE id = $1', [logId]);
   res.json(success(null, '日志已删除'));
