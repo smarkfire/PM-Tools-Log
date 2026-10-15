@@ -6,7 +6,7 @@
     <div class="login-card">
       <div class="login-header">
         <div class="logo-mark">
-          <LogoMark :size="26" color="#fff" />
+          <LogoMark :size="30" color="#fff" />
         </div>
         <h1>注册账号</h1>
         <p class="subtitle">加入 LogMate 络脉，记录每一天</p>
@@ -146,7 +146,8 @@ async function handleRegister() {
 }
 
 .bg-decor {
-  position: absolute;
+  /* fixed 定位：避免 absolute 溢出造成横向滚动条，且不随内容滚动 */
+  position: fixed;
   border-radius: 50%;
   filter: blur(80px);
   opacity: 0.4;

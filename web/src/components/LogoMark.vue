@@ -19,23 +19,22 @@
     <path
       d="M15.5 33.5C20.5 33.5 25.5 31.5 29.5 27.5"
       stroke="currentColor"
-      stroke-width="2.4"
+      stroke-width="2.8"
       stroke-linecap="round"
-      opacity="0.9"
     />
     <path
       d="M22.5 27.5C27.5 27.5 32.5 24.5 36.5 20.5"
       stroke="currentColor"
-      stroke-width="2.4"
+      stroke-width="2.8"
       stroke-linecap="round"
-      opacity="0.75"
+      opacity="0.9"
     />
     <path
       d="M29.5 21C34 21 37.5 18.5 40.5 15"
       stroke="currentColor"
-      stroke-width="2.4"
+      stroke-width="2.8"
       stroke-linecap="round"
-      opacity="0.6"
+      opacity="0.8"
     />
     <!-- 汇聚节点 -->
     <circle cx="38.5" cy="9.5" r="3.4" fill="currentColor" />
