@@ -1,7 +1,7 @@
 {
   "name": "logmate-server",
   "version": "1.0.0",
-  "description": "日志管理系统后端 - Express + TypeScript + PostgreSQL",
+  "description": "LogMate 络脉后端 - Express + TypeScript + PostgreSQL",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",

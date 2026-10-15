@@ -14,7 +14,7 @@ if (!env.isServerless) {
     await initDb();
 
     app.listen(env.port, () => {
-      console.log(`[Server] 日志管理系统后端已启动: http://localhost:${env.port}`);
+      console.log(`[Server] LogMate 络脉后端已启动: http://localhost:${env.port}`);
       console.log(`[Server] 数据库: ${env.db.host}:${env.db.port}/${env.db.database}`);
     });
   }

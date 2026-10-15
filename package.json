@@ -2,7 +2,7 @@
   "name": "logmate",
   "version": "1.0.0",
   "private": true,
-  "description": "日志管理系统（Vercel 部署用根依赖，供 api/ Serverless Function 构建）",
+  "description": "LogMate 络脉（Vercel 部署用根依赖，供 api/ Serverless Function 构建）",
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
