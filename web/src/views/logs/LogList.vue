@@ -120,7 +120,7 @@
               编辑
             </el-button>
             <el-button
-              v-if="row.user_id === userStore.user?.id"
+              v-if="row.user_id === userStore.user?.id && (isInCurrentWeek(row.log_date) || userStore.isDirector)"
               link
               type="danger"
               size="small"

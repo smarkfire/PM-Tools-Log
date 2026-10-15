@@ -302,7 +302,11 @@ export async function saveLog(req: Request, res: Response) {
 export async function deleteLog(req: Request, res: Response) {
   const userId = req.authUser!.id;
   const logId = parseInt(req.params.id, 10);
-  const log = await queryOne('SELECT user_id FROM work_logs WHERE id = $1', [logId]);
+  const log = await queryOne<{ user_id: number; in_week: boolean }>(
+    `SELECT user_id, (log_date >= date_trunc('week', CURRENT_DATE)::date) AS in_week
+     FROM work_logs WHERE id = $1`,
+    [logId]
+  );
   if (!log) {
     res.status(404).json(fail('日志不存在'));
     return;
@@ -310,6 +314,14 @@ export async function deleteLog(req: Request, res: Response) {
   if (log.user_id !== userId) {
     res.status(403).json(fail('只能删除自己的日志'));
     return;
+  }
+  // 本周以前的日志不可删除（项目总监/系统管理员除外，与跨周编辑规则一致）
+  if (!log.in_week) {
+    const meRole = await queryOne<{ role: string }>('SELECT role FROM users WHERE id = $1', [userId]);
+    if (meRole?.role !== 'director' && meRole?.role !== 'admin') {
+      res.status(400).json(fail('本周以前填写的日志不能删除'));
+      return;
+    }
   }
   await queryOne('DELETE FROM work_logs WHERE id = $1', [logId]);
   res.json(success(null, '日志已删除'));
