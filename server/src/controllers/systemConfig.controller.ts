@@ -2,9 +2,9 @@
  * 系统配置控制器
  *
  * 包含三部分：
- * 1. 管理员系统设置：AI Key（系统默认）、Base URL、模型、菜单开关
+ * 1. 管理员系统设置：AI Key（系统默认）、Base URL、模型、角色菜单可见性
  * 2. 用户 AI 配置：用户自己的 API Key（优先于系统 Key）
- * 3. 菜单可见性：根据管理员开关 + 用户角色返回可见菜单（供前端侧边栏使用）
+ * 3. 菜单可见性：根据用户角色的菜单配置返回可见菜单（供前端侧边栏使用）
  */
 import { Request, Response } from 'express';
 import { queryOne } from '../config/db';
@@ -57,7 +57,7 @@ export async function getAdminConfig(req: Request, res: Response) {
 /**
  * 更新系统配置（仅管理员）
  * PUT /api/admin/config
- * body: { qwen_api_key?, qwen_base_url?, qwen_model?, menu_xxx?, ... }
+ * body: { qwen_api_key?, qwen_base_url?, qwen_model?, role_menus?, ... }
  */
 export async function updateAdminConfig(req: Request, res: Response) {
   if (!(await requireDirector(req, res))) return;
@@ -71,16 +71,6 @@ export async function updateAdminConfig(req: Request, res: Response) {
     'deepseek_api_key',
     'deepseek_base_url',
     'deepseek_model',
-    // 菜单开关
-    'menu_logs_write',
-    'menu_logs',
-    'menu_logs_all',
-    'menu_projects',
-    'menu_reports',
-    'menu_chat',
-    'menu_prompts',
-    'menu_users',
-    'menu_ai_settings',
     // 按角色的菜单可见性（JSON：{ 角色: { 菜单key: boolean } }）
     'role_menus',
   ];
@@ -91,10 +81,7 @@ export async function updateAdminConfig(req: Request, res: Response) {
   }
 
   for (const [key, value] of updates) {
-    // 菜单开关统一存 'true'/'false' 字符串；role_menus 存 JSON 字符串
-    if (key.startsWith('menu_')) {
-      await setConfig(key, value === true || value === 'true' ? 'true' : 'false');
-    } else if (key === 'role_menus') {
+    if (key === 'role_menus') {
       const json = typeof value === 'string' ? value : JSON.stringify(value);
       await setConfig(key, json);
     } else {
@@ -196,24 +183,11 @@ export async function updateMyAiConfig(req: Request, res: Response) {
 // ==================== 菜单可见性 ====================
 
 /**
- * 获取当前用户的可见菜单配置（结合管理员开关 + 按角色开关）
+ * 获取当前用户的可见菜单配置（按角色配置）
  * GET /api/config/menus
  */
 export async function getVisibleMenus(req: Request, res: Response) {
   const config = await getAllConfig();
-
-  // 全局菜单开关（对所有角色生效，角色开关在其基础上二次收紧）
-  const globalMenus = {
-    logsWrite: config.menu_logs_write !== 'false',
-    logs: config.menu_logs !== 'false',
-    logsAll: config.menu_logs_all !== 'false',
-    projects: config.menu_projects !== 'false',
-    reports: config.menu_reports !== 'false',
-    chat: config.menu_chat !== 'false',
-    prompts: config.menu_prompts !== 'false',
-    users: config.menu_users !== 'false',
-    aiSettings: config.menu_ai_settings !== 'false',
-  };
 
   // 按角色的菜单可见性配置（role_menus，JSON：{ 角色: { 菜单key: boolean } }）
   let roleMenus: Record<string, boolean> = {};
@@ -227,5 +201,6 @@ export async function getVisibleMenus(req: Request, res: Response) {
     // 配置损坏时按全部可见处理
   }
 
-  res.json(success({ menus: { ...globalMenus, ...roleMenus } }));
+  // 仅返回角色配置中明确关闭/开启的菜单；未返回的菜单前端默认可见
+  res.json(success({ menus: roleMenus }));
 }

@@ -2,12 +2,12 @@
   <div class="page-container">
     <div class="page-header">
       <div class="page-title">系统设置</div>
-      <div class="page-desc">配置系统级 AI 服务（用户未配置自己的 Key 时使用）与功能菜单开关</div>
+      <div class="page-desc">配置系统级 AI 服务（用户未配置自己的 Key 时使用）与角色菜单可见性</div>
     </div>
 
     <el-row :gutter="16">
       <!-- AI 服务配置 -->
-      <el-col :xs="24" :md="12">
+      <el-col :xs="24" :md="24">
         <el-card shadow="never" v-loading="loading">
           <template #header>
             <div class="card-header-row">
@@ -68,40 +68,6 @@
           </div>
         </el-card>
       </el-col>
-
-      <!-- 菜单开关 -->
-      <el-col :xs="24" :md="12">
-        <el-card shadow="never" v-loading="loading">
-          <template #header>
-            <div class="card-header-row">
-              <span>功能菜单开关</span>
-              <el-tag size="small" type="info">控制功能菜单对用户是否可见</el-tag>
-            </div>
-          </template>
-
-          <el-alert
-            type="warning"
-            :closable="false"
-            show-icon
-            title="关闭后，对应用户将无法在侧边栏看到该菜单（接口仍受登录鉴权保护）"
-            style="margin-bottom: 16px"
-          />
-
-          <div class="menu-switch-list">
-            <div v-for="m in menuItems" :key="m.key" class="menu-switch-item">
-              <div class="menu-switch-info">
-                <div class="menu-switch-name">{{ m.label }}</div>
-                <div class="menu-switch-desc">{{ m.desc }}</div>
-              </div>
-              <el-switch v-model="menuState[m.key]" />
-            </div>
-          </div>
-
-          <div class="save-bar">
-            <el-button type="primary" :loading="savingMenu" @click="saveMenuConfig">保存菜单开关</el-button>
-          </div>
-        </el-card>
-      </el-col>
     </el-row>
 
     <!-- ==================== 角色菜单可见性 ==================== -->
@@ -111,7 +77,7 @@
           <template #header>
             <div class="card-header-row">
               <span>角色菜单可见性</span>
-              <el-tag size="small" type="info">按角色控制菜单是否可见（与全局开关同时生效）</el-tag>
+              <el-tag size="small" type="info">按角色控制各菜单是否可见</el-tag>
             </div>
           </template>
 
@@ -119,7 +85,7 @@
             type="info"
             :closable="false"
             show-icon
-            title="菜单最终可见 = 全局开关开启 且 当前角色开关开启；用户管理/系统设置仅系统管理员可见，不在此配置"
+            title="未配置的角色默认全部菜单可见；用户管理/系统设置仅项目总监与系统管理员可见，不在此配置"
             style="margin-bottom: 16px"
           />
 
@@ -336,7 +302,6 @@ const configStore = useConfigStore();
 
 const loading = ref(false);
 const savingAi = ref(false);
-const savingMenu = ref(false);
 
 /** Key 是否已在服务端设置（用于区分"留空=不修改"与"未配置"） */
 const configSet = reactive({ qwen_api_key__set: false, deepseek_api_key__set: false });
@@ -349,31 +314,6 @@ const form = reactive({
   deepseek_base_url: '',
   deepseek_model: '',
 });
-
-/** 菜单开关（本地编辑态） */
-const menuState = reactive({
-  menu_logs_write: true,
-  menu_logs: true,
-  menu_logs_all: true,
-  menu_projects: true,
-  menu_reports: true,
-  menu_chat: true,
-  menu_prompts: true,
-  menu_users: true,
-  menu_ai_settings: true,
-});
-
-const menuItems = [
-  { key: 'menu_logs_write', label: '填写日志', desc: '用户填写每日工作日志' },
-  { key: 'menu_logs', label: '我的日志', desc: '查看自己的历史日志' },
-  { key: 'menu_logs_all', label: '团队日志', desc: '按权限查看团队日志' },
-  { key: 'menu_projects', label: '项目管理', desc: '项目/小组/成员管理' },
-  { key: 'menu_reports', label: '报告中心', desc: '周报/月报生成与查看' },
-  { key: 'menu_chat', label: 'AI 助手', desc: 'AI 对话功能' },
-  { key: 'menu_prompts', label: '提示词配置', desc: '用户自定义提示词' },
-  { key: 'menu_users', label: '用户管理', desc: '仅系统管理员可见' },
-  { key: 'menu_ai_settings', label: '个人 AI 配置', desc: '用户配置自己的 API Key' },
-] as const;
 
 // ==================== 角色菜单可见性 ====================
 const appStore = useAppStore();
@@ -472,9 +412,6 @@ async function loadConfig() {
     form.deepseek_model = String(data.deepseek_model || '');
     configSet.qwen_api_key__set = !!data.qwen_api_key__set;
     configSet.deepseek_api_key__set = !!data.deepseek_api_key__set;
-    for (const m of menuItems) {
-      (menuState as any)[m.key] = String((data as any)[m.key]) !== 'false';
-    }
     applyRoleMenus(String((data as any).role_menus || ''));
   } finally {
     loading.value = false;
@@ -503,18 +440,6 @@ async function saveAiConfig() {
     savingAi.value = false;
   }
 }
-
-/** 保存菜单开关，并刷新前端菜单可见性 */
-async function saveMenuConfig() {
-  savingMenu.value = true;
-  try {
-    await adminConfigApi.update({ ...menuState });
-    ElMessage.success('菜单开关已保存，已实时生效');
-    await configStore.fetchMenus();
-  } finally {
-    savingMenu.value = false;
-  }
-}
 </script>
 
 <style scoped>
@@ -528,11 +453,6 @@ async function saveMenuConfig() {
   margin: 4px 0 12px;
   font-size: 14px;
   color: #303133;
-}
-
-.menu-switch-list {
-  display: flex;
-  flex-direction: column;
 }
 
 .menu-switch-item {
@@ -552,12 +472,6 @@ async function saveMenuConfig() {
   font-size: 14px;
   color: #303133;
   font-weight: 500;
-}
-
-.menu-switch-desc {
-  font-size: 12px;
-  color: #909399;
-  margin-top: 2px;
 }
 
 .save-bar {

@@ -199,17 +199,8 @@ WHERE NOT EXISTS (SELECT 1 FROM system_prompts WHERE system_prompts.type = v.typ
 INSERT INTO system_config (config_key, config_value, description)
 SELECT v.key, v.value, v.descr
 FROM (VALUES
-  -- 菜单开关（管理员可控制功能菜单对用户是否开放）
-  ('menu_logs_write',  'true', '填写日志菜单开关'),
-  ('menu_logs',        'true', '我的日志菜单开关'),
-  ('menu_logs_all',    'true', '团队日志菜单开关'),
-  ('menu_projects',    'true', '项目管理菜单开关'),
-  ('menu_reports',     'true', '报告中心菜单开关'),
-  ('menu_chat',        'true', 'AI助手菜单开关'),
-  ('menu_prompts',     'true', '提示词配置菜单开关'),
-  ('menu_users',       'true', '用户管理菜单开关'),
-  ('menu_ai_settings', 'true', '用户AI配置菜单开关'),
   -- 系统 AI 配置（留空则回退到服务器 .env 环境变量）
+  -- 菜单可见性由 role_menus 配置控制（系统设置-角色菜单可见性），无需种子
   ('qwen_api_key',     '', '通义千问 API Key'),
   ('qwen_base_url',    'https://dashscope.aliyuncs.com/compatible-mode/v1', '通义千问 Base URL'),
   ('qwen_model',       'qwen-plus', '通义千问模型'),

@@ -280,17 +280,8 @@ const SYSTEM_PROMPT_SEEDS: { type: string; name: string; content: string }[] = [
 
 /** 系统配置种子数据 */
 const CONFIG_SEEDS: { key: string; value: string; desc: string }[] = [
-  // 菜单开关（管理员可控制功能菜单对用户是否开放）
-  { key: 'menu_logs_write', value: 'true', desc: '填写日志菜单开关' },
-  { key: 'menu_logs', value: 'true', desc: '我的日志菜单开关' },
-  { key: 'menu_logs_all', value: 'true', desc: '团队日志菜单开关' },
-  { key: 'menu_projects', value: 'true', desc: '项目管理菜单开关' },
-  { key: 'menu_reports', value: 'true', desc: '报告中心菜单开关' },
-  { key: 'menu_chat', value: 'true', desc: 'AI助手菜单开关' },
-  { key: 'menu_prompts', value: 'true', desc: '提示词配置菜单开关' },
-  { key: 'menu_users', value: 'true', desc: '用户管理菜单开关' },
-  { key: 'menu_ai_settings', value: 'true', desc: '用户AI配置菜单开关' },
   // 系统 AI 配置（管理员可在界面修改；留空则回退到 .env）
+  // 菜单可见性由 role_menus 配置控制（管理员在系统设置-角色菜单可见性中维护），无需种子
   { key: 'qwen_api_key', value: '', desc: '通义千问 API Key' },
   { key: 'qwen_base_url', value: 'https://dashscope.aliyuncs.com/compatible-mode/v1', desc: '通义千问 Base URL' },
   { key: 'qwen_model', value: 'qwen-plus', desc: '通义千问模型' },

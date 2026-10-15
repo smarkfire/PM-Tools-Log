@@ -241,16 +241,8 @@ export interface AdminConfig {
   deepseek_api_key__set: boolean;
   deepseek_base_url: string;
   deepseek_model: string;
-  // 菜单开关
-  menu_logs_write: string;
-  menu_logs: string;
-  menu_logs_all: string;
-  menu_projects: string;
-  menu_reports: string;
-  menu_chat: string;
-  menu_prompts: string;
-  menu_users: string;
-  menu_ai_settings: string;
+  // 按角色的菜单可见性（JSON 字符串）
+  role_menus?: string;
   [key: string]: string | boolean;
 }
 
