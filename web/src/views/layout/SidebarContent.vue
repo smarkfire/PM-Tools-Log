@@ -1,20 +1,23 @@
 <template>
   <div class="sidebar-content">
     <div class="logo-area" @click="$router.push('/dashboard')">
-      <el-icon :size="26" color="#409eff"><Notebook /></el-icon>
+      <div class="logo-mark">
+        <el-icon :size="20" color="#fff"><Notebook /></el-icon>
+      </div>
       <span v-if="!collapsed" class="logo-text">日志管理系统</span>
     </div>
 
     <el-menu
       :default-active="activeMenu"
       :collapse="collapsed"
-      background-color="#1d2939"
-      text-color="#aeb8c5"
+      background-color="transparent"
+      text-color="#98a2b3"
       active-text-color="#ffffff"
       router
       class="sidebar-menu"
       :collapse-transition="false"
     >
+      <div v-if="!collapsed" class="menu-group-title">工作</div>
       <el-menu-item v-if="menus.dashboard !== false" index="/dashboard">
         <el-icon><Odometer /></el-icon>
         <template #title>工作台</template>
@@ -40,6 +43,7 @@
         <template #title>项目管理</template>
       </el-menu-item>
 
+      <div v-if="!collapsed" class="menu-group-title">协同</div>
       <el-menu-item v-if="menus.reports" index="/reports">
         <el-icon><DataAnalysis /></el-icon>
         <template #title>报告中心</template>
@@ -70,6 +74,7 @@
         <template #title>意见反馈</template>
       </el-menu-item>
 
+      <div v-if="!collapsed && (menus.prompts || (userStore.isDirector && menus.users) || userStore.isDirector)" class="menu-group-title">配置</div>
       <el-menu-item v-if="menus.prompts" index="/prompts">
         <el-icon><MagicStick /></el-icon>
         <template #title>提示词配置</template>
@@ -147,6 +152,7 @@ const canViewTeamLogs = computed(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
+  background: linear-gradient(180deg, #16222f 0%, #1d2939 40%, #1d2939 100%);
 }
 
 .logo-area {
@@ -156,7 +162,20 @@ const canViewTeamLogs = computed(() => {
   justify-content: center;
   gap: 10px;
   cursor: pointer;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.logo-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #409eff 0%, #337ecc 100%);
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.4);
+  flex-shrink: 0;
 }
 
 .logo-text {
@@ -164,24 +183,52 @@ const canViewTeamLogs = computed(() => {
   font-size: 16px;
   font-weight: 600;
   white-space: nowrap;
+  letter-spacing: 0.5px;
+}
+
+.menu-group-title {
+  padding: 14px 20px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #667085;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .sidebar-menu {
   border-right: none;
   flex: 1;
   overflow-y: auto;
+  padding: 4px 10px;
 }
 
 .sidebar-menu:not(.el-menu--collapse) {
   width: 100%;
 }
 
-:deep(.el-menu-item.is-active) {
-  background: #409eff !important;
+/* 菜单项：圆角、悬浮、选中态 */
+:deep(.el-menu-item) {
+  height: 42px;
+  line-height: 42px;
+  margin: 2px 0;
+  border-radius: 8px;
+  transition: background 0.2s, color 0.2s;
 }
 
 :deep(.el-menu-item:hover) {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.07) !important;
+  color: #e4e7ed !important;
+}
+
+:deep(.el-menu-item.is-active) {
+  background: linear-gradient(90deg, rgba(64, 158, 255, 0.95), rgba(64, 158, 255, 0.8)) !important;
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.35);
+  color: #fff !important;
+}
+
+:deep(.el-menu-item.is-active .el-icon) {
+  color: #fff !important;
 }
 
 .menu-title-with-badge {
@@ -192,5 +239,20 @@ const canViewTeamLogs = computed(() => {
 
 .menu-badge :deep(.el-badge__content) {
   border: none;
+  box-shadow: 0 0 0 2px #1d2939;
+}
+
+/* 折叠态菜单居中图标 */
+:deep(.el-menu--collapse .el-menu-item) {
+  margin: 2px 0;
+  border-radius: 8px;
+}
+
+/* 滚动条 */
+.sidebar-menu::-webkit-scrollbar {
+  width: 4px;
+}
+.sidebar-menu::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
 }
 </style>

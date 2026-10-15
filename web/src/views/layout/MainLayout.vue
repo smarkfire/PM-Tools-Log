@@ -158,52 +158,71 @@ function handleCommand(command: string) {
 }
 
 .header {
-  background: #fff;
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: saturate(180%) blur(10px);
+  -webkit-backdrop-filter: saturate(180%) blur(10px);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid var(--border-lighter, #ebeef5);
   z-index: 10;
   padding: 0 16px;
+  position: sticky;
+  top: 0;
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .menu-btn {
   cursor: pointer;
-  color: #606266;
+  color: var(--text-regular, #606266);
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, color 0.2s;
 }
 
 .menu-btn:hover {
-  color: #409eff;
+  color: var(--primary-color, #409eff);
+  background: #ecf5ff;
 }
 
 .header-title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
-  color: #303133;
+  color: var(--text-primary, #303133);
+  letter-spacing: 0.3px;
 }
 
 .header-right {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 6px;
 }
 
 /* 消息提醒图标 */
 .notice-btn {
   cursor: pointer;
-  color: #606266;
+  color: var(--text-regular, #606266);
   display: flex;
   align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  transition: background 0.2s, color 0.2s;
 }
 
 .notice-btn:hover {
-  color: #409eff;
+  color: var(--primary-color, #409eff);
+  background: #ecf5ff;
 }
 
 .user-info {
@@ -211,12 +230,20 @@ function handleCommand(command: string) {
   align-items: center;
   gap: 8px;
   cursor: pointer;
+  padding: 4px 8px 4px 4px;
+  border-radius: 10px;
+  transition: background 0.2s;
+}
+
+.user-info:hover {
+  background: #f5f7fa;
 }
 
 .user-avatar {
-  background: #409eff;
+  background: linear-gradient(135deg, #409eff 0%, #337ecc 100%);
   color: #fff;
   font-weight: 600;
+  box-shadow: 0 2px 6px rgba(64, 158, 255, 0.3);
 }
 
 .user-name {

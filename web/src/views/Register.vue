@@ -1,9 +1,12 @@
 <template>
   <div class="login-page">
+    <div class="bg-decor bg-decor--1"></div>
+    <div class="bg-decor bg-decor--2"></div>
+
     <div class="login-card">
       <div class="login-header">
-        <div class="logo">
-          <el-icon :size="36" color="#409eff"><Notebook /></el-icon>
+        <div class="logo-mark">
+          <el-icon :size="24" color="#fff"><Notebook /></el-icon>
         </div>
         <h1>注册账号</h1>
         <p class="subtitle">加入日志管理系统</p>
@@ -62,7 +65,7 @@
 import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { User, Lock, Message, Avatar } from '@element-plus/icons-vue';
+import { User, Lock, Message, Avatar, Notebook } from '@element-plus/icons-vue';
 import { useUserStore } from '../stores/user';
 
 const router = useRouter();
@@ -128,59 +131,123 @@ async function handleRegister() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 16px;
+  padding: 24px 16px;
+  position: relative;
+}
+
+/* 固定背景层：内容超高滚动时背景始终铺满视口 */
+.login-page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(135deg, #16222f 0%, #1d2939 40%, #2a3a52 100%);
+  z-index: -1;
+}
+
+.bg-decor {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.bg-decor--1 {
+  width: 400px;
+  height: 400px;
+  background: #409eff;
+  top: -120px;
+  right: -80px;
+}
+
+.bg-decor--2 {
+  width: 320px;
+  height: 320px;
+  background: #7d3bc4;
+  bottom: -100px;
+  left: -60px;
 }
 
 .login-card {
   width: 100%;
   max-width: 400px;
-  background: #fff;
-  border-radius: 16px;
-  padding: 36px 32px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 20px;
+  padding: 34px 32px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
+  position: relative;
+  z-index: 1;
+  animation: card-in 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .login-header {
   text-align: center;
-  margin-bottom: 24px;
+  margin-bottom: 22px;
+}
+
+.logo-mark {
+  width: 48px;
+  height: 48px;
+  border-radius: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #409eff 0%, #337ecc 100%);
+  box-shadow: 0 6px 18px rgba(64, 158, 255, 0.4);
 }
 
 .login-header h1 {
   font-size: 22px;
   margin-top: 12px;
-  color: #303133;
+  color: var(--text-primary, #303133);
+  font-weight: 700;
+  letter-spacing: 0.5px;
 }
 
 .subtitle {
-  color: #909399;
+  color: var(--text-secondary, #909399);
   font-size: 13px;
   margin-top: 6px;
 }
 
 .submit-btn {
   width: 100%;
+  height: 44px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 4px;
+  box-shadow: 0 4px 14px rgba(64, 158, 255, 0.35);
 }
 
 .login-footer {
   text-align: center;
   font-size: 14px;
-  color: #909399;
+  color: var(--text-secondary, #909399);
   margin-top: 8px;
 }
 
 .login-footer a {
-  color: #409eff;
+  color: var(--primary-color, #409eff);
   text-decoration: none;
+  font-weight: 500;
 }
 
 .tip {
-  margin-top: 16px;
+  margin-top: 14px;
+  border-radius: 8px;
 }
 
 @media (max-width: 480px) {
   .login-card {
-    padding: 24px 18px;
+    padding: 26px 18px;
   }
 }
 </style>

@@ -405,19 +405,22 @@ onMounted(async () => {
 .mobile-log-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .mobile-log-item {
-  background: #fafbfc;
-  border: 1px solid #ebeef5;
-  border-radius: 8px;
-  padding: 12px;
+  background: var(--bg-card, #fff);
+  border: 1px solid var(--border-lighter, #ebeef5);
+  border-radius: 12px;
+  padding: 14px;
   cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.2s, transform 0.2s;
 }
 
 .mobile-log-item:active {
-  background: #f0f2f5;
+  background: #f5f7fa;
+  transform: scale(0.995);
 }
 
 .mobile-log-top {

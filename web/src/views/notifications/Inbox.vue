@@ -177,15 +177,24 @@ onMounted(loadData);
 .notice-item {
   display: flex;
   gap: 12px;
-  padding: 12px 10px;
-  border-bottom: 1px solid #f0f2f5;
-  border-radius: 6px;
+  padding: 13px 12px;
+  border-bottom: 1px solid var(--border-lighter, #ebeef5);
+  border-radius: 8px;
   cursor: pointer;
   align-items: flex-start;
+  transition: background 0.2s;
 }
 
 .notice-item:hover {
-  background: #f8f9fb;
+  background: #f5f7fa;
+}
+
+.notice-item.unread {
+  background: #f0f7ff;
+}
+
+.notice-item.unread:hover {
+  background: #e6f0fc;
 }
 
 .notice-item.unread .notice-title span {
@@ -194,6 +203,14 @@ onMounted(loadData);
 
 .notice-icon {
   margin-top: 2px;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--fill-light, #f5f7fa);
+  flex-shrink: 0;
 }
 
 .notice-main {
