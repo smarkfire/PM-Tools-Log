@@ -215,7 +215,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { logApi, projectApi, promptApi, chatApi } from '../../api';
 import { useUserStore } from '../../stores/user';
 import { currentWeekMonday, formatDate } from '../../utils/date';
@@ -394,6 +394,37 @@ async function handleSave() {
       `各小组工时之和（${groupHoursSum.value}h）不能大于当天总工时（${form.hours ?? 0}h）`
     );
     return;
+  }
+  // 未使用 AI 优化时提醒用户确认（防遗忘；不想用 AI 的用户可选择直接保存）
+  if (!optimizedContent.value?.trim()) {
+    let action = 'close';
+    try {
+      await ElMessageBox.confirm(
+        '当前日志尚未使用 AI 优化，保存后将以原始内容存档（可能影响报告生成质量）。建议先使用 AI 优化。',
+        '未使用 AI 优化',
+        {
+          type: 'warning',
+          confirmButtonText: '去优化',
+          cancelButtonText: '不优化，直接保存',
+          distinguishCancelAndClose: true,
+        }
+      );
+      action = 'optimize';
+    } catch (act) {
+      action = String(act); // 'cancel'（不优化直接保存）/ 'close'（关闭弹窗）
+    }
+    if (action === 'optimize') {
+      // 触发 AI 优化并中止本次保存，用户预览优化结果后再自行保存
+      try {
+        await handleOptimize();
+      } catch {
+        // 优化失败（无可用 Key 等），错误提示已由请求层展示
+      }
+      return;
+    }
+    if (action !== 'cancel') {
+      return; // 关闭弹窗视为取消保存
+    }
   }
   saving.value = true;
   try {
