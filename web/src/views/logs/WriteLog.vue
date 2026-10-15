@@ -237,11 +237,13 @@ const router = useRouter();
 const editDate = computed(() => (route.query.date as string) || '');
 const isEdit = computed(() => !!editDate.value);
 
-// 可填写日期范围：本周一 ~ 今天（编辑模式日期锁定为原日志日期）
+// 可填写日期范围：本周一 ~ 本周日（编辑模式日期锁定为原日志日期）
 const weekMonday = currentWeekMonday();
+const mondayTime = new Date(weekMonday + 'T00:00:00').getTime();
+const sundayTime = mondayTime + 6 * 24 * 3600 * 1000;
 function disableOutOfRangeDate(d: Date): boolean {
-  const monday = new Date(weekMonday + 'T00:00:00');
-  return d < monday || d.getTime() > Date.now();
+  const t = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  return t < mondayTime || t > sundayTime;
 }
 
 const form = reactive({

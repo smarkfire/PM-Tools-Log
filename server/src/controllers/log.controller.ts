@@ -251,13 +251,14 @@ export async function saveLog(req: Request, res: Response) {
     [userId, logDate]
   );
   if (!existing) {
-    // 新建日志：仅可填写本周内的日期（跨周的历史修改需走审批流程）
+    // 新建日志：仅可填写本周内（周一至周日）的日期（跨周的历史修改需走审批流程）
     const weekCheck = await queryOne<{ ok: boolean }>(
-      `SELECT ($1::date >= date_trunc('week', CURRENT_DATE)::date) AS ok`,
+      `SELECT ($1::date >= date_trunc('week', CURRENT_DATE)::date
+               AND $1::date < (date_trunc('week', CURRENT_DATE) + INTERVAL '7 days')::date) AS ok`,
       [logDate]
     );
     if (!weekCheck?.ok) {
-      res.status(400).json(fail('只能填写本周内的日志，历史周需按审批流程处理'));
+      res.status(400).json(fail('只能填写本周（周一至周日）内的日志，历史周需按审批流程处理'));
       return;
     }
   }
