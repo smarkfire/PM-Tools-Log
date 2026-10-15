@@ -299,15 +299,9 @@ onMounted(loadPrompts);
 </script>
 
 <style scoped>
-.card-header-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
 .list-section-title {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-secondary);
   margin: 12px 0 8px;
 }
 
@@ -323,20 +317,22 @@ onMounted(loadPrompts);
 }
 
 .prompt-item {
-  border: 1px solid #ebeef5;
-  border-radius: 8px;
+  border: 1px solid var(--border-lighter);
+  border-radius: var(--radius-lg);
   padding: 12px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: border-color var(--transition-base), box-shadow var(--transition-base),
+    background var(--transition-base);
 }
 
 .prompt-item:hover {
-  border-color: #c6e2ff;
+  border-color: var(--el-color-primary-light-5, #c6e2ff);
+  box-shadow: var(--shadow-hover);
 }
 
 .prompt-item.active {
-  border-color: #409eff;
-  background: #ecf5ff;
+  border-color: var(--primary-color);
+  background: var(--el-color-primary-light-9, #ecf5ff);
 }
 
 .prompt-item-header {
@@ -349,12 +345,12 @@ onMounted(loadPrompts);
 .prompt-name {
   font-size: 14px;
   font-weight: 600;
-  color: #303133;
+  color: var(--text-primary);
 }
 
 .prompt-preview {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-secondary);
   line-height: 1.5;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -363,7 +359,7 @@ onMounted(loadPrompts);
 
 .label-tip {
   font-size: 12px;
-  color: #c0c4cc;
+  color: var(--text-placeholder);
   font-weight: normal;
 }
 

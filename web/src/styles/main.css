@@ -258,3 +258,47 @@ body {
   align-items: center;
   justify-content: center;
 }
+
+/* 卡片头部行：标题 + 右侧操作 */
+.card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* 分页器容器 */
+.pagination-wrap {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 768px) {
+  .pagination-wrap {
+    justify-content: center;
+  }
+}
+
+/* 列表项卡片：审批、反馈、移动端列表等通用 */
+.item-card {
+  border: 1px solid var(--border-lighter);
+  border-radius: var(--radius-lg);
+  padding: 12px 14px;
+  background: var(--bg-card);
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+.item-card:hover {
+  border-color: var(--el-color-primary-light-5, #c6e2ff);
+  box-shadow: var(--shadow-hover);
+}
+
+.item-card.is-clickable {
+  cursor: pointer;
+}
+
+.item-card.is-clickable:active {
+  transform: scale(0.99);
+}

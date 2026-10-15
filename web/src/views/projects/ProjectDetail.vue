@@ -85,7 +85,7 @@
           </template>
 
           <div v-if="project.groups?.length">
-            <div v-for="group in project.groups" :key="group.id" class="group-item">
+            <div v-for="group in project.groups" :key="group.id" class="group-item item-card">
               <div class="group-info">
                 <div class="group-name">
                   <el-icon><Collection /></el-icon>{{ group.name }}
@@ -470,17 +470,6 @@ onMounted(loadProject);
   font-weight: 600;
 }
 
-.card-header-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.text-muted {
-  color: #c0c4cc;
-  font-size: 12px;
-}
-
 /* 移动端成员列表 */
 .mobile-member-list {
   display: flex;
@@ -492,7 +481,7 @@ onMounted(loadProject);
   align-items: center;
   justify-content: space-between;
   padding: 10px 0;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid var(--border-lighter);
 }
 
 .mobile-member-item:last-child {
@@ -509,7 +498,7 @@ onMounted(loadProject);
 
 .member-sub {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-secondary);
   margin-top: 4px;
 }
 
@@ -518,9 +507,6 @@ onMounted(loadProject);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px;
-  border: 1px solid #ebeef5;
-  border-radius: 8px;
   margin-bottom: 10px;
 }
 
@@ -530,17 +516,17 @@ onMounted(loadProject);
   gap: 6px;
   font-size: 14px;
   font-weight: 600;
-  color: #303133;
+  color: var(--text-primary);
 }
 
 .group-leader {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-secondary);
   margin-top: 4px;
 }
 
 .group-count {
-  color: #c0c4cc;
+  color: var(--text-placeholder);
 }
 
 .edit-card {

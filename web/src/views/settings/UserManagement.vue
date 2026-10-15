@@ -66,7 +66,7 @@
 
       <!-- 移动端卡片 -->
       <div v-else class="mobile-user-list">
-        <div v-for="u in users" :key="u.id" class="mobile-user-item">
+        <div v-for="u in users" :key="u.id" class="mobile-user-item item-card">
           <div class="user-top">
             <span class="user-name">{{ u.display_name }}</span>
             <el-select
@@ -150,11 +150,6 @@ onMounted(loadUsers);
   flex-wrap: wrap;
 }
 
-.text-muted {
-  color: #c0c4cc;
-  font-size: 12px;
-}
-
 .member-tag {
   margin: 2px 4px 2px 0;
 }
@@ -164,12 +159,6 @@ onMounted(loadUsers);
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-
-.mobile-user-item {
-  border: 1px solid #ebeef5;
-  border-radius: 8px;
-  padding: 12px;
 }
 
 .user-top {
@@ -182,12 +171,12 @@ onMounted(loadUsers);
 .user-name {
   font-size: 15px;
   font-weight: 600;
-  color: #303133;
+  color: var(--text-primary);
 }
 
 .user-sub {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-secondary);
   margin-bottom: 6px;
 }
 

@@ -12,7 +12,7 @@
         <!-- 待我审批 -->
         <el-tab-pane label="待我审批" name="pending">
           <div v-if="pendingList.length" class="approval-list" v-loading="pendingLoading">
-            <div v-for="a in pendingList" :key="a.id" class="approval-item">
+            <div v-for="a in pendingList" :key="a.id" class="approval-item item-card">
               <div class="approval-top">
                 <el-tag :type="a.target_type === 'log' ? 'primary' : 'warning'" size="small">
                   {{ a.target_type === 'log' ? '日志修改' : '报告修改' }}
@@ -37,7 +37,7 @@
         <!-- 我的申请 -->
         <el-tab-pane :label="`我的申请${myList.length ? '' : ''}`" name="mine">
           <div v-if="myList.length" class="approval-list" v-loading="myLoading">
-            <div v-for="a in myList" :key="a.id" class="approval-item">
+            <div v-for="a in myList" :key="a.id" class="approval-item item-card">
               <div class="approval-top">
                 <el-tag :type="a.target_type === 'log' ? 'primary' : 'warning'" size="small">
                   {{ a.target_type === 'log' ? '日志修改' : '报告修改' }}
@@ -156,12 +156,6 @@ onMounted(() => {
   gap: 12px;
 }
 
-.approval-item {
-  border: 1px solid #ebeef5;
-  border-radius: 8px;
-  padding: 12px 14px;
-}
-
 .approval-top {
   display: flex;
   align-items: center;
@@ -171,47 +165,47 @@ onMounted(() => {
 
 .applicant {
   font-weight: 600;
-  color: #303133;
+  color: var(--text-primary);
   font-size: 14px;
 }
 
 .approval-time {
   margin-left: auto;
   font-size: 12px;
-  color: #c0c4cc;
+  color: var(--text-placeholder);
 }
 
 .approval-target {
   font-size: 13px;
-  color: #606266;
+  color: var(--text-regular);
   margin-top: 8px;
 }
 
 .approval-reason {
   font-size: 13px;
-  color: #303133;
+  color: var(--text-primary);
   margin-top: 6px;
   white-space: pre-wrap;
 }
 
 .reason-label {
-  color: #909399;
+  color: var(--text-secondary);
 }
 
 .approval-note {
   margin-top: 6px;
   font-size: 13px;
-  color: #67c23a;
+  color: var(--success-color);
 }
 
 .approval-tip {
   margin-top: 6px;
   font-size: 12px;
-  color: #409eff;
+  color: var(--primary-color);
 }
 
 .approval-tip.rejected {
-  color: #f56c6c;
+  color: var(--danger-color);
 }
 
 .approval-actions {

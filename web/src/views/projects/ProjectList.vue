@@ -168,11 +168,14 @@ onMounted(loadProjects);
 .project-card {
   margin-bottom: 16px;
   cursor: pointer;
-  transition: transform 0.2s;
+  transition: transform var(--transition-base), box-shadow var(--transition-base),
+    border-color var(--transition-base);
 }
 
 .project-card:hover {
   transform: translateY(-3px);
+  border-color: var(--el-color-primary-light-5, #c6e2ff);
+  box-shadow: var(--shadow-hover);
 }
 
 .project-header {
@@ -185,7 +188,7 @@ onMounted(loadProjects);
 .project-name {
   font-size: 16px;
   font-weight: 600;
-  color: #303133;
+  color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -193,7 +196,7 @@ onMounted(loadProjects);
 
 .project-desc {
   font-size: 13px;
-  color: #909399;
+  color: var(--text-secondary);
   height: 38px;
   line-height: 19px;
   overflow: hidden;
@@ -215,7 +218,7 @@ onMounted(loadProjects);
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #909399;
+  color: var(--text-secondary);
 }
 
 .project-footer {

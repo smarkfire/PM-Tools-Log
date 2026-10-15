@@ -75,7 +75,7 @@
 
       <!-- 移动端卡片 -->
       <div v-else class="mobile-report-list">
-        <div v-for="r in reports" :key="r.id" class="mobile-report-item" @click="viewReport(r)">
+        <div v-for="r in reports" :key="r.id" class="mobile-report-item item-card is-clickable" @click="viewReport(r)">
           <div class="report-top">
             <el-tag :type="r.type === 'weekly' ? 'primary' : 'warning'" size="small">
               {{ r.type === 'weekly' ? '周报' : '月报' }}
@@ -551,7 +551,7 @@ onMounted(async () => {
 
 .generate-tip {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-secondary);
   margin-left: 8px;
 }
 
@@ -561,12 +561,6 @@ onMounted(async () => {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.pagination-wrap {
-  margin-top: 16px;
-  display: flex;
-  justify-content: flex-end;
 }
 
 .ai-warning {
@@ -580,17 +574,6 @@ onMounted(async () => {
   gap: 10px;
 }
 
-.mobile-report-item {
-  border: 1px solid #ebeef5;
-  border-radius: 8px;
-  padding: 12px;
-  cursor: pointer;
-}
-
-.mobile-report-item:active {
-  background: #f5f7fa;
-}
-
 .report-top {
   display: flex;
   align-items: center;
@@ -601,18 +584,18 @@ onMounted(async () => {
 .report-time {
   margin-left: auto;
   font-size: 12px;
-  color: #c0c4cc;
+  color: var(--text-placeholder);
 }
 
 .report-subject {
   font-size: 15px;
   font-weight: 600;
-  color: #303133;
+  color: var(--text-primary);
 }
 
 .report-period {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-secondary);
   margin-top: 4px;
 }
 
@@ -625,7 +608,7 @@ onMounted(async () => {
 .edit-label {
   font-size: 13px;
   font-weight: 600;
-  color: #606266;
+  color: var(--text-regular);
   margin-bottom: 6px;
 }
 
@@ -640,8 +623,8 @@ onMounted(async () => {
 }
 
 .edit-preview {
-  border: 1px solid #ebeef5;
-  border-radius: 6px;
+  border: 1px solid var(--border-lighter);
+  border-radius: var(--radius-base);
   padding: 12px;
   height: 420px;
   overflow-y: auto;
@@ -649,15 +632,15 @@ onMounted(async () => {
 }
 
 .report-content {
-  background: #fff;
-  border: 1px solid #ebeef5;
-  border-radius: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-lighter);
+  border-radius: var(--radius-lg);
   padding: 16px;
   font-size: 14px;
   line-height: 1.8;
   max-height: 60vh;
   overflow-y: auto;
-  color: #303133;
+  color: var(--text-primary);
 }
 
 .report-content :deep(li) {
@@ -669,7 +652,7 @@ onMounted(async () => {
   width: 100%;
   margin-top: 6px;
   font-size: 12px;
-  color: #909399;
+  color: var(--text-secondary);
   line-height: 1.5;
 }
 </style>

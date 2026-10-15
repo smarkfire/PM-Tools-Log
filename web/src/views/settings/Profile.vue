@@ -328,12 +328,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.card-header-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
 .ai-config-card {
   margin-bottom: 16px;
 }
@@ -341,14 +335,14 @@ onMounted(() => {
 .key-source {
   margin-top: 6px;
   font-size: 12px;
-  color: #909399;
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
 .key-meta {
-  color: #c0c4cc;
+  color: var(--text-placeholder);
 }
 
 .ai-actions {
@@ -359,7 +353,7 @@ onMounted(() => {
 .section-title {
   font-weight: 600;
   margin: 20px 0 12px;
-  color: #303133;
+  color: var(--text-primary);
 }
 
 .membership-list {
@@ -373,19 +367,19 @@ onMounted(() => {
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  background: #f8f9fb;
-  border-radius: 8px;
+  background: var(--fill-light);
+  border-radius: var(--radius-lg);
 }
 
 .m-project {
   font-size: 14px;
   font-weight: 500;
-  color: #303133;
+  color: var(--text-primary);
 }
 
 .m-group {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-secondary);
 }
 
 /* 密码强度提示 */
@@ -393,7 +387,7 @@ onMounted(() => {
   width: 100%;
   margin-top: 4px;
   font-size: 12px;
-  color: #909399;
+  color: var(--text-secondary);
   line-height: 1.5;
 }
 </style>

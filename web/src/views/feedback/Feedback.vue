@@ -58,7 +58,7 @@
             </div>
           </template>
           <div v-if="myFeedback.length" class="feedback-list">
-            <div v-for="f in myFeedback" :key="f.id" class="feedback-item">
+            <div v-for="f in myFeedback" :key="f.id" class="feedback-item item-card">
               <div class="feedback-top">
                 <el-tag :type="f.status === 'processed' ? 'success' : 'warning'" size="small">
                   {{ f.status === 'processed' ? '已处理' : '待处理' }}
@@ -136,12 +136,12 @@ onMounted(loadData);
 .version-title {
   font-weight: 600;
   font-size: 14px;
-  color: #303133;
+  color: var(--text-primary);
 }
 
 .version-desc {
   font-size: 13px;
-  color: #606266;
+  color: var(--text-regular);
   margin-top: 4px;
   white-space: pre-wrap;
 }
@@ -160,12 +160,6 @@ onMounted(loadData);
   gap: 12px;
 }
 
-.feedback-item {
-  border: 1px solid #ebeef5;
-  border-radius: 8px;
-  padding: 12px;
-}
-
 .feedback-top {
   display: flex;
   align-items: center;
@@ -175,34 +169,34 @@ onMounted(loadData);
 
 .feedback-time {
   font-size: 12px;
-  color: #c0c4cc;
+  color: var(--text-placeholder);
 }
 
 .feedback-content {
   font-size: 14px;
-  color: #303133;
+  color: var(--text-primary);
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .feedback-contact {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-secondary);
   margin-top: 6px;
 }
 
 .feedback-reply {
   margin-top: 10px;
   background: #f0f9eb;
-  border-radius: 6px;
+  border-radius: var(--radius-base);
   padding: 10px;
   font-size: 13px;
-  color: #303133;
+  color: var(--text-primary);
 }
 
 .reply-label {
   font-weight: 600;
-  color: #67c23a;
+  color: var(--success-color);
   margin-bottom: 4px;
 }
 </style>

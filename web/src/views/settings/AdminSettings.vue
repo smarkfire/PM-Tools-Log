@@ -190,7 +190,7 @@
             </div>
           </template>
           <div v-if="feedbackList.length" class="fb-list">
-            <div v-for="f in feedbackList" :key="f.id" class="fb-item">
+            <div v-for="f in feedbackList" :key="f.id" class="fb-item item-card">
               <div class="fb-top">
                 <span class="fb-user">{{ f.user_name }}（{{ f.username }}）</span>
                 <el-tag :type="f.status === 'processed' ? 'success' : 'warning'" size="small">
@@ -443,16 +443,10 @@ async function saveAiConfig() {
 </script>
 
 <style scoped>
-.card-header-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
 .section-title {
   margin: 4px 0 12px;
   font-size: 14px;
-  color: #303133;
+  color: var(--text-primary);
 }
 
 .menu-switch-item {
@@ -460,7 +454,7 @@ async function saveAiConfig() {
   align-items: center;
   justify-content: space-between;
   padding: 12px 4px;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid var(--border-lighter);
   gap: 16px;
 }
 
@@ -470,7 +464,7 @@ async function saveAiConfig() {
 
 .menu-switch-name {
   font-size: 14px;
-  color: #303133;
+  color: var(--text-primary);
   font-weight: 500;
 }
 
@@ -500,12 +494,12 @@ async function saveAiConfig() {
 .version-title {
   font-weight: 600;
   font-size: 14px;
-  color: #303133;
+  color: var(--text-primary);
 }
 
 .version-desc {
   font-size: 13px;
-  color: #606266;
+  color: var(--text-regular);
   margin-top: 4px;
   white-space: pre-wrap;
 }
@@ -515,12 +509,6 @@ async function saveAiConfig() {
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.fb-item {
-  border: 1px solid #ebeef5;
-  border-radius: 8px;
-  padding: 12px;
 }
 
 .fb-top {
@@ -533,18 +521,18 @@ async function saveAiConfig() {
 .fb-user {
   font-weight: 600;
   font-size: 14px;
-  color: #303133;
+  color: var(--text-primary);
 }
 
 .fb-time {
   margin-left: auto;
   font-size: 12px;
-  color: #c0c4cc;
+  color: var(--text-placeholder);
 }
 
 .fb-content {
   font-size: 13px;
-  color: #303133;
+  color: var(--text-primary);
   margin-top: 8px;
   white-space: pre-wrap;
   word-break: break-word;
@@ -552,7 +540,7 @@ async function saveAiConfig() {
 
 .fb-contact {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-secondary);
   margin-top: 6px;
 }
 

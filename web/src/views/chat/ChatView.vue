@@ -329,8 +329,8 @@ onMounted(async () => {
 /* 对话列表面板 */
 .conversation-panel {
   width: 240px;
-  background: #fff;
-  border-right: 1px solid #e4e7ed;
+  background: var(--bg-card);
+  border-right: 1px solid var(--border-light);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -348,7 +348,7 @@ onMounted(async () => {
   justify-content: space-between;
   padding: 0 14px;
   font-weight: 600;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--border-lighter);
   flex-shrink: 0;
 }
 
@@ -363,22 +363,27 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
   padding: 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   margin-bottom: 4px;
+  transition: background var(--transition-fast);
 }
 
 .conversation-item:hover {
-  background: #f5f7fa;
+  background: var(--fill-light);
 }
 
 .conversation-item.active {
-  background: #ecf5ff;
+  background: var(--el-color-primary-light-9, #ecf5ff);
 }
 
 .conv-icon {
-  color: #909399;
+  color: var(--text-secondary);
   flex-shrink: 0;
+}
+
+.conversation-item.active .conv-icon {
+  color: var(--primary-color);
 }
 
 .conv-info {
@@ -388,7 +393,7 @@ onMounted(async () => {
 
 .conv-title {
   font-size: 13px;
-  color: #303133;
+  color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -396,22 +401,23 @@ onMounted(async () => {
 
 .conv-time {
   font-size: 11px;
-  color: #c0c4cc;
+  color: var(--text-placeholder);
   margin-top: 2px;
 }
 
 .conv-delete {
-  color: #c0c4cc;
+  color: var(--text-placeholder);
   flex-shrink: 0;
-  visibility: hidden;
+  opacity: 0;
+  transition: opacity var(--transition-fast), color var(--transition-fast);
 }
 
 .conversation-item:hover .conv-delete {
-  visibility: visible;
+  opacity: 1;
 }
 
 .conv-delete:hover {
-  color: #f56c6c;
+  color: var(--danger-color);
 }
 
 /* 聊天主区 */
@@ -420,13 +426,13 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  background: #f5f7fa;
+  background: var(--bg-page);
 }
 
 .chat-header {
   height: 52px;
-  background: #fff;
-  border-bottom: 1px solid #e4e7ed;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-light);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -438,7 +444,7 @@ onMounted(async () => {
   flex: 1;
   font-size: 15px;
   font-weight: 600;
-  color: #303133;
+  color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -471,7 +477,7 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #909399;
+  color: var(--text-secondary);
 }
 
 .empty-chat p {
@@ -480,7 +486,7 @@ onMounted(async () => {
 
 .empty-tip {
   font-size: 12px !important;
-  color: #c0c4cc;
+  color: var(--text-placeholder);
 }
 
 .suggestions {
@@ -511,12 +517,12 @@ onMounted(async () => {
 }
 
 .user-avatar {
-  background: #409eff;
+  background: var(--primary-color);
   color: #fff;
 }
 
 .ai-avatar {
-  background: #67c23a;
+  background: var(--success-color);
   color: #fff;
   font-size: 12px;
   font-weight: 600;
@@ -526,13 +532,13 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #909399;
+  color: var(--text-secondary);
 }
 
 /* 输入区 */
 .input-area {
-  background: #fff;
-  border-top: 1px solid #e4e7ed;
+  background: var(--bg-card);
+  border-top: 1px solid var(--border-light);
   padding: 12px;
   display: flex;
   gap: 10px;

@@ -452,7 +452,7 @@ async function handleSave() {
 }
 
 .optimize-result {
-  border-top: 1px dashed #e4e7ed;
+  border-top: 1px dashed var(--border-light);
   padding-top: 12px;
 }
 
@@ -461,7 +461,7 @@ async function handleSave() {
   align-items: center;
   justify-content: space-between;
   font-size: 13px;
-  color: #606266;
+  color: var(--text-regular);
   margin-bottom: 8px;
 }
 
@@ -471,7 +471,7 @@ async function handleSave() {
 
 .save-card .save-tip {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-secondary);
   text-align: center;
   margin-top: 8px;
 }
@@ -482,7 +482,7 @@ async function handleSave() {
   margin-top: 8px;
   padding: 8px 12px;
   background: var(--el-fill-color-light);
-  border-radius: 6px;
+  border-radius: var(--radius-base);
 }
 
 .group-hours-row {
@@ -499,17 +499,17 @@ async function handleSave() {
 
 .group-hours-unit {
   font-size: 13px;
-  color: #909399;
+  color: var(--text-secondary);
 }
 
 .group-hours-tip {
   margin-top: 4px;
   font-size: 12px;
-  color: #909399;
+  color: var(--text-secondary);
 }
 
 .group-hours-exceed {
-  color: #f56c6c;
+  color: var(--danger-color);
   font-weight: 500;
 }
 </style>

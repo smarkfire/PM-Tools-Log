@@ -386,19 +386,9 @@ onMounted(async () => {
 
 <style scoped>
 .log-preview {
-  color: #606266;
+  color: var(--text-regular);
   font-size: 13px;
   line-height: 1.5;
-}
-
-.text-muted {
-  color: #c0c4cc;
-}
-
-.pagination-wrap {
-  margin-top: 16px;
-  display: flex;
-  justify-content: flex-end;
 }
 
 /* 移动端卡片样式 */
@@ -433,24 +423,24 @@ onMounted(async () => {
 .log-date {
   font-size: 13px;
   font-weight: 600;
-  color: #303133;
+  color: var(--text-primary);
 }
 
 .log-hours {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-secondary);
   margin-left: auto;
 }
 
 .mobile-log-datetime {
   margin-top: 6px;
   font-size: 12px;
-  color: #b0b3ba;
+  color: var(--text-placeholder);
 }
 
 .mobile-log-user {
   font-size: 12px;
-  color: #409eff;
+  color: var(--primary-color);
   margin-bottom: 4px;
 }
 
@@ -462,13 +452,13 @@ onMounted(async () => {
 .section-title {
   font-size: 14px;
   font-weight: 600;
-  color: #303133;
+  color: var(--text-primary);
   margin: 14px 0 8px;
 }
 
 .log-content {
   background: #f8f9fb;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 14px;
   font-size: 13px;
   line-height: 1.7;
@@ -478,7 +468,7 @@ onMounted(async () => {
 }
 
 .log-content.original {
-  color: #909399;
+  color: var(--text-secondary);
   white-space: pre-wrap;
 }
 </style>
