@@ -76,7 +76,9 @@
     <el-card shadow="never" v-loading="loading">
       <!-- 桌面端表格 -->
       <el-table v-if="!isMobile" :data="logs" stripe>
-        <el-table-column prop="log_date" label="日期" width="110" />
+        <el-table-column prop="log_date" label="日志日期" width="110">
+          <template #default="{ row }">{{ formatDateOnly(row.log_date) }}</template>
+        </el-table-column>
         <el-table-column prop="user_name" label="成员" width="100" v-if="isTeam" />
         <el-table-column prop="project_name" label="项目" width="140">
           <template #default="{ row }">
@@ -98,6 +100,11 @@
               {{ row.ai_provider === 'qwen' ? '千问' : 'DS' }}
             </el-tag>
             <span v-else class="text-muted">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="数据时间" width="170">
+          <template #default="{ row }">
+            <span class="log-datetime">{{ formatDateTime(row.created_at) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
@@ -129,12 +136,13 @@
       <div v-else class="mobile-log-list">
         <div v-for="log in logs" :key="log.id" class="mobile-log-item" @click="viewLog(log)">
           <div class="mobile-log-top">
-            <span class="log-date">{{ log.log_date }}</span>
+            <span class="log-date">{{ formatDateOnly(log.log_date) }}</span>
             <el-tag v-if="log.project_name" size="small" effect="light">{{ log.project_name }}</el-tag>
             <span v-if="log.hours" class="log-hours">{{ log.hours }}h</span>
           </div>
           <div v-if="isTeam" class="mobile-log-user">{{ log.user_name }}</div>
           <div class="log-preview">{{ previewText(log) }}</div>
+          <div class="mobile-log-datetime">数据时间：{{ formatDateTime(log.created_at) }}</div>
         </div>
         <el-empty v-if="!loading && logs.length === 0" description="暂无日志" />
       </div>
@@ -158,13 +166,16 @@
     <el-dialog v-model="detailVisible" title="日志详情" :width="isMobile ? '92%' : '700px'" top="6vh">
       <template v-if="currentLog">
         <el-descriptions :column="isMobile ? 1 : 3" border size="small" class="detail-desc">
-          <el-descriptions-item label="日期">{{ currentLog.log_date }}</el-descriptions-item>
+          <el-descriptions-item label="日志日期">{{ formatDateOnly(currentLog.log_date) }}</el-descriptions-item>
           <el-descriptions-item label="成员">{{ currentLog.user_name }}</el-descriptions-item>
           <el-descriptions-item label="项目">{{ currentLog.project_name || '-' }}</el-descriptions-item>
           <el-descriptions-item label="工时">
             {{ currentLog.hours ? currentLog.hours + ' 小时' : '-' }}
           </el-descriptions-item>
-          <el-descriptions-item label="AI 优化" :span="2">
+          <el-descriptions-item label="数据时间" :span="isMobile ? 1 : 2">
+            {{ formatDateTime(currentLog.created_at) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="AI 优化">
             <el-tag v-if="currentLog.ai_provider" size="small" :type="currentLog.ai_provider === 'qwen' ? 'primary' : 'success'">
               {{ currentLog.ai_provider === 'qwen' ? '通义千问' : 'DeepSeek' }}
             </el-tag>
@@ -236,7 +247,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { logApi, projectApi, approvalApi } from '../../api';
 import { useUserStore } from '../../stores/user';
 import { useAppStore } from '../../stores/app';
-import { isInCurrentWeek } from '../../utils/date';
+import { isInCurrentWeek, formatDateTime } from '../../utils/date';
 import MdPreview from '../../components/MdPreview.vue';
 import type { Project, WorkLog, ProjectMember } from '../../types';
 
@@ -269,6 +280,11 @@ const currentLog = ref<WorkLog | null>(null);
 function previewText(log: WorkLog) {
   const text = log.optimized_content || log.content;
   return text.length > 100 ? text.slice(0, 100) + '...' : text;
+}
+
+/** 日志日期：仅取年月日（YYYY-MM-DD），去掉可能带出的时间部分 */
+function formatDateOnly(d?: string) {
+  return d ? d.slice(0, 10) : '-';
 }
 
 async function loadLogs() {
@@ -311,7 +327,7 @@ function handleEditLog(log: WorkLog) {
     ElMessage.warning('只能编辑自己的日志');
     return;
   }
-  if (isInCurrentWeek(log.log_date) || userStore.user?.role === 'director') {
+  if (isInCurrentWeek(log.log_date) || userStore.isDirector) {
     detailVisible.value = false;
     router.push(`/logs/write?date=${log.log_date}`);
     return;
@@ -421,6 +437,12 @@ onMounted(async () => {
   font-size: 12px;
   color: #909399;
   margin-left: auto;
+}
+
+.mobile-log-datetime {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #b0b3ba;
 }
 
 .mobile-log-user {

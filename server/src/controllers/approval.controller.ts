@@ -19,8 +19,8 @@ export async function canApprove(approverId: number, applicantId: number): Promi
   if (approverId === applicantId) return false;
   const approver = await queryOne<{ role: string }>('SELECT role FROM users WHERE id = $1', [approverId]);
   if (!approver) return false;
-  // 项目总监可审批所有人
-  if (approver.role === 'director') return true;
+  // 系统管理员（项目总监/管理员）可审批所有人
+  if (approver.role === 'director' || approver.role === 'admin') return true;
   // 审批人是申请人所在项目的项目经理（且申请人在该项目不是经理）
   const asManager = await queryOne(
     `SELECT 1 FROM project_members pm1
@@ -70,8 +70,8 @@ export async function createApproval(req: Request, res: Response) {
     return;
   }
   const me = await queryOne<{ role: string }>('SELECT role FROM users WHERE id = $1', [userId]);
-  if (me?.role === 'director') {
-    res.status(400).json(fail('您是项目总监，可直接修改任意自己的日志/报告，无需审批'));
+  if (me?.role === 'director' || me?.role === 'admin') {
+    res.status(400).json(fail('您是系统管理员，可直接修改任意自己的日志/报告，无需审批'));
     return;
   }
   // 校验目标是本人所有

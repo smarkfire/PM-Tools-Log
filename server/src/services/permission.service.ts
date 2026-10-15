@@ -16,12 +16,12 @@ import { DataScope, GlobalRole } from '../types';
  * 计算用户的数据权限范围
  */
 export async function getDataScope(userId: number): Promise<DataScope> {
-  // 1. 项目总监：全部数据
+  // 1. 系统管理员（项目总监/管理员）：全部数据
   const user = await queryOne<{ role: GlobalRole }>('SELECT role FROM users WHERE id = $1', [userId]);
   if (!user) {
     return { type: 'self', userIds: [userId], projectIds: [], ledGroupIds: [] };
   }
-  if (user.role === 'director') {
+  if (user.role === 'director' || user.role === 'admin') {
     return { type: 'all', userIds: null, projectIds: null, ledGroupIds: [] };
   }
 
@@ -87,11 +87,12 @@ export async function getDataScope(userId: number): Promise<DataScope> {
 }
 
 /**
- * 判断用户是否为项目总监
+ * 判断用户是否为系统管理员（项目总监或系统管理员角色）
+ * 与项目总监同等的系统级权限：查看全部数据、管理用户、系统配置等
  */
 export async function isDirector(userId: number): Promise<boolean> {
   const user = await queryOne<{ role: string }>('SELECT role FROM users WHERE id = $1', [userId]);
-  return user?.role === 'director';
+  return user?.role === 'director' || user?.role === 'admin';
 }
 
 /**

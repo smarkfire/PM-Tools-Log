@@ -156,6 +156,19 @@ export async function updateProfile(req: Request, res: Response) {
 }
 
 /**
+ * 强密码校验：长度 8~64 位，且至少包含大写字母、小写字母、数字、特殊字符中的三类
+ */
+function isStrongPassword(pw: string): boolean {
+  if (typeof pw !== 'string' || pw.length < 8 || pw.length > 64) return false;
+  let kinds = 0;
+  if (/[A-Z]/.test(pw)) kinds++;
+  if (/[a-z]/.test(pw)) kinds++;
+  if (/[0-9]/.test(pw)) kinds++;
+  if (/[^A-Za-z0-9]/.test(pw)) kinds++;
+  return kinds >= 3;
+}
+
+/**
  * 修改密码
  * PUT /api/auth/password
  */
@@ -166,8 +179,10 @@ export async function changePassword(req: Request, res: Response) {
     res.status(400).json(fail('旧密码和新密码为必填项'));
     return;
   }
-  if (newPassword.length < 6) {
-    res.status(400).json(fail('新密码长度至少6位'));
+  if (!isStrongPassword(newPassword)) {
+    res.status(400).json(
+      fail('新密码强度不足：需 8~64 位，且至少包含大写字母、小写字母、数字、特殊字符中的三类')
+    );
     return;
   }
   const user = await queryOne<{ password_hash: string }>(

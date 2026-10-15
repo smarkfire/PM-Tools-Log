@@ -19,6 +19,10 @@ const DEFAULT_MENUS: MenuVisibility = {
   prompts: true,
   users: true,
   aiSettings: true,
+  dashboard: true,
+  inbox: true,
+  approvals: true,
+  feedback: true,
 };
 
 export const useConfigStore = defineStore('config', {

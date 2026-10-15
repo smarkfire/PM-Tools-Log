@@ -360,7 +360,7 @@ const canGenerateProject = computed(() => managedProjects.value.length > 0);
 // 权限范围内成员（可为他人生成个人报告）
 const canGenerateForOthers = computed(() => {
   const role = userStore.user?.role;
-  return role === 'director' || role === 'manager' || role === 'leader';
+  return role === 'director' || role === 'admin' || role === 'manager' || role === 'leader';
 });
 
 const visibleMembers = computed(() => {
@@ -394,7 +394,7 @@ function handleEditReport() {
     return;
   }
   const inWeek =
-    timestampInCurrentWeek(currentReport.value.created_at) || userStore.user?.role === 'director';
+    timestampInCurrentWeek(currentReport.value.created_at) || userStore.isDirector;
   if (!inWeek) {
     applyForm.reason = '';
     detailVisible.value = false;

@@ -28,7 +28,9 @@ export async function createFeedback(req: Request, res: Response) {
     [userId, content.trim(), contact?.trim() || null]
   );
   // 给所有项目总监发站内通知
-  const directors = await queryMany<{ id: number }>(`SELECT id FROM users WHERE role = 'director'`);
+  const directors = await queryMany<{ id: number }>(
+    `SELECT id FROM users WHERE role IN ('director', 'admin')`
+  );
   for (const d of directors) {
     await queryOne(
       `INSERT INTO notifications (user_id, title, content, type, link)

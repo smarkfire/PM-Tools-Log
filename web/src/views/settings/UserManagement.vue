@@ -2,7 +2,7 @@
   <div class="page-container">
     <div class="page-header">
       <div class="page-title">用户管理</div>
-      <div class="page-desc">管理系统用户的全局角色（仅项目总监可见）</div>
+      <div class="page-desc">管理系统用户的全局角色（项目总监/系统管理员可见）</div>
     </div>
 
     <el-card shadow="never" class="filter-card">
@@ -36,6 +36,7 @@
               @change="(val: string) => handleRoleChange(row, val)"
             >
               <el-option label="项目总监" value="director" />
+              <el-option label="系统管理员" value="admin" />
               <el-option label="项目经理" value="manager" />
               <el-option label="小组长" value="leader" />
               <el-option label="成员" value="member" />
@@ -76,6 +77,7 @@
               @change="(val: string) => handleRoleChange(u, val)"
             >
               <el-option label="项目总监" value="director" />
+              <el-option label="系统管理员" value="admin" />
               <el-option label="项目经理" value="manager" />
               <el-option label="小组长" value="leader" />
               <el-option label="成员" value="member" />

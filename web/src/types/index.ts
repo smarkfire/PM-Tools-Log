@@ -3,7 +3,7 @@
  */
 
 /** 全局角色 */
-export type GlobalRole = 'director' | 'manager' | 'leader' | 'member';
+export type GlobalRole = 'director' | 'admin' | 'manager' | 'leader' | 'member';
 
 /** 项目内角色 */
 export type ProjectRole = 'manager' | 'leader' | 'member';
@@ -33,6 +33,8 @@ export interface Project {
   id: number;
   name: string;
   description: string | null;
+  /** 团队介绍（支持 Markdown） */
+  team_intro: string | null;
   status: string;
   created_by: number;
   start_date: string | null;

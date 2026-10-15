@@ -5,7 +5,7 @@
       <div class="page-desc">
         {{ isEdit
           ? '修改已有日志并保存；超过本周的修改需上级审批通过后才可提交'
-          : '记录今日工作，支持通义千问 / DeepSeek AI 优化' }}
+          : '可填写本周任意一天的工作日志，支持通义千问 / DeepSeek AI 优化' }}
       </div>
     </div>
 
@@ -25,14 +25,20 @@
                     type="date"
                     value-format="YYYY-MM-DD"
                     placeholder="选择日期"
-                    :disabled-date="(d: Date) => d.getTime() > Date.now()"
+                    :disabled="isEdit"
+                    :disabled-date="disableOutOfRangeDate"
                     style="width: 100%"
                   />
                 </el-form-item>
               </el-col>
               <el-col :xs="24" :sm="12">
-                <el-form-item label="所属项目">
-                  <el-select v-model="form.projectId" placeholder="选择项目（可选）" clearable style="width: 100%">
+                <el-form-item label="所属项目" required>
+                  <el-select
+                    v-model="form.projectId"
+                    placeholder="请选择项目（必填）"
+                    :clearable="false"
+                    style="width: 100%"
+                  >
                     <el-option
                       v-for="p in projects"
                       :key="p.id"
@@ -54,7 +60,7 @@
                 </el-form-item>
               </el-col>
               <el-col v-if="form.projectId && projectGroups.length" :span="24">
-                <el-form-item label="涉及小组（跨组协作可多选，工时按组分配）">
+                <el-form-item label="涉及小组（可多选，工时按组分配）">
                   <el-select
                     v-model="groupSelection"
                     multiple
@@ -181,7 +187,7 @@
             size="large"
             style="width: 100%"
             :loading="saving"
-            :disabled="!form.content?.trim()"
+            :disabled="!form.content?.trim() || !form.projectId"
             @click="handleSave"
           >
             <el-icon><Check /></el-icon>
@@ -202,6 +208,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { logApi, projectApi, promptApi, chatApi } from '../../api';
 import { useUserStore } from '../../stores/user';
+import { currentWeekMonday, formatDate } from '../../utils/date';
 import type { Project, UserPrompt } from '../../types';
 
 const userStore = useUserStore();
@@ -212,13 +219,20 @@ const providers = reactive({ qwenConfigured: false, deepseekConfigured: false })
 const aiProvider = ref<'qwen' | 'deepseek'>('qwen');
 const selectedPromptId = ref<number | undefined>(undefined);
 
-const today = new Date().toISOString().slice(0, 10);
+const today = formatDate(new Date());
 const route = useRoute();
 const router = useRouter();
 
 // 编辑模式：?date=YYYY-MM-DD 时加载当天已有日志
 const editDate = computed(() => (route.query.date as string) || '');
 const isEdit = computed(() => !!editDate.value);
+
+// 可填写日期范围：本周一 ~ 今天（编辑模式日期锁定为原日志日期）
+const weekMonday = currentWeekMonday();
+function disableOutOfRangeDate(d: Date): boolean {
+  const monday = new Date(weekMonday + 'T00:00:00');
+  return d < monday || d.getTime() > Date.now();
+}
 
 const form = reactive({
   logDate: editDate.value || today,
@@ -340,11 +354,19 @@ async function copyOptimized() {
 }
 
 async function handleSave() {
+  if (!form.projectId) {
+    ElMessage.warning('请选择所属项目');
+    return;
+  }
+  if (!form.logDate) {
+    ElMessage.warning('请选择日志日期');
+    return;
+  }
   saving.value = true;
   try {
     await logApi.save({
       logDate: form.logDate,
-      projectId: form.projectId || null,
+      projectId: form.projectId,
       content: form.content,
       optimizedContent: optimizedContent.value || undefined,
       aiProvider: form.aiProvider || undefined,

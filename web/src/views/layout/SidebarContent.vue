@@ -15,7 +15,7 @@
       class="sidebar-menu"
       :collapse-transition="false"
     >
-      <el-menu-item index="/dashboard">
+      <el-menu-item v-if="menus.dashboard !== false" index="/dashboard">
         <el-icon><Odometer /></el-icon>
         <template #title>工作台</template>
       </el-menu-item>
@@ -50,7 +50,7 @@
         <template #title>AI 助手</template>
       </el-menu-item>
 
-      <el-menu-item index="/inbox">
+      <el-menu-item v-if="menus.inbox !== false" index="/inbox">
         <el-icon><Bell /></el-icon>
         <template #title>
           <span class="menu-title-with-badge">
@@ -60,12 +60,12 @@
         </template>
       </el-menu-item>
 
-      <el-menu-item index="/approvals">
+      <el-menu-item v-if="menus.approvals !== false" index="/approvals">
         <el-icon><Checked /></el-icon>
         <template #title>审批中心</template>
       </el-menu-item>
 
-      <el-menu-item index="/feedback">
+      <el-menu-item v-if="menus.feedback !== false" index="/feedback">
         <el-icon><Promotion /></el-icon>
         <template #title>意见反馈</template>
       </el-menu-item>
@@ -131,14 +131,14 @@ onUnmounted(() => {
   if (unreadTimer) clearInterval(unreadTimer);
 });
 
-// 总监/项目经理/小组长可查看团队日志
+// 总监/管理员/项目经理/小组长可查看团队日志
 const canViewTeamLogs = computed(() => {
   const role = userStore.user?.role;
   const memberships = userStore.userInfo?.memberships || [];
   const hasManagerOrLeader = memberships.some(
     (m) => m.projectRole === 'manager' || m.projectRole === 'leader'
   );
-  return role === 'director' || role === 'manager' || role === 'leader' || hasManagerOrLeader;
+  return role === 'director' || role === 'admin' || role === 'manager' || role === 'leader' || hasManagerOrLeader;
 });
 </script>
 

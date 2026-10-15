@@ -11,13 +11,13 @@ import { queryOne } from '../config/db';
 import { success, fail } from '../utils/response';
 import { getAllConfig, setConfig, getUserAiConfig } from '../services/config.service';
 
-/** 需要管理员权限的接口统一在此校验 */
+/** 需要管理员权限的接口统一在此校验（项目总监或系统管理员） */
 async function requireDirector(req: Request, res: Response): Promise<boolean> {
   const user = await queryOne<{ role: string }>('SELECT role FROM users WHERE id = $1', [
     req.authUser!.id,
   ]);
-  if (!user || user.role !== 'director') {
-    res.status(403).json(fail('无权限：仅项目总监可操作系统设置', 403));
+  if (!user || (user.role !== 'director' && user.role !== 'admin')) {
+    res.status(403).json(fail('无权限：仅项目总监或系统管理员可操作系统设置', 403));
     return false;
   }
   return true;
@@ -81,6 +81,8 @@ export async function updateAdminConfig(req: Request, res: Response) {
     'menu_prompts',
     'menu_users',
     'menu_ai_settings',
+    // 按角色的菜单可见性（JSON：{ 角色: { 菜单key: boolean } }）
+    'role_menus',
   ];
   const updates = Object.entries(body).filter(([k]) => allowedKeys.includes(k));
   if (updates.length === 0) {
@@ -89,9 +91,12 @@ export async function updateAdminConfig(req: Request, res: Response) {
   }
 
   for (const [key, value] of updates) {
-    // 菜单开关统一存 'true'/'false' 字符串
+    // 菜单开关统一存 'true'/'false' 字符串；role_menus 存 JSON 字符串
     if (key.startsWith('menu_')) {
       await setConfig(key, value === true || value === 'true' ? 'true' : 'false');
+    } else if (key === 'role_menus') {
+      const json = typeof value === 'string' ? value : JSON.stringify(value);
+      await setConfig(key, json);
     } else {
       await setConfig(key, value == null ? '' : String(value));
     }
@@ -191,25 +196,36 @@ export async function updateMyAiConfig(req: Request, res: Response) {
 // ==================== 菜单可见性 ====================
 
 /**
- * 获取当前用户的可见菜单配置（结合管理员开关）
+ * 获取当前用户的可见菜单配置（结合管理员开关 + 按角色开关）
  * GET /api/config/menus
  */
 export async function getVisibleMenus(req: Request, res: Response) {
   const config = await getAllConfig();
-  res.json(
-    success({
-      // 全部开关（true/false），前端据此显示/隐藏菜单
-      menus: {
-        logsWrite: config.menu_logs_write !== 'false',
-        logs: config.menu_logs !== 'false',
-        logsAll: config.menu_logs_all !== 'false',
-        projects: config.menu_projects !== 'false',
-        reports: config.menu_reports !== 'false',
-        chat: config.menu_chat !== 'false',
-        prompts: config.menu_prompts !== 'false',
-        users: config.menu_users !== 'false',
-        aiSettings: config.menu_ai_settings !== 'false',
-      },
-    })
-  );
+
+  // 全局菜单开关（对所有角色生效，角色开关在其基础上二次收紧）
+  const globalMenus = {
+    logsWrite: config.menu_logs_write !== 'false',
+    logs: config.menu_logs !== 'false',
+    logsAll: config.menu_logs_all !== 'false',
+    projects: config.menu_projects !== 'false',
+    reports: config.menu_reports !== 'false',
+    chat: config.menu_chat !== 'false',
+    prompts: config.menu_prompts !== 'false',
+    users: config.menu_users !== 'false',
+    aiSettings: config.menu_ai_settings !== 'false',
+  };
+
+  // 按角色的菜单可见性配置（role_menus，JSON：{ 角色: { 菜单key: boolean } }）
+  let roleMenus: Record<string, boolean> = {};
+  try {
+    const parsed = config.role_menus ? JSON.parse(config.role_menus) : null;
+    const myRole = req.authUser?.role || 'member';
+    if (parsed && typeof parsed === 'object' && parsed[myRole]) {
+      roleMenus = parsed[myRole];
+    }
+  } catch {
+    // 配置损坏时按全部可见处理
+  }
+
+  res.json(success({ menus: { ...globalMenus, ...roleMenus } }));
 }

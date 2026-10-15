@@ -112,9 +112,9 @@ const createRules = {
   name: [{ required: true, message: '请输入项目名称', trigger: 'blur' }],
 };
 
-// 总监或全局经理角色可创建项目
+// 总监、管理员或全局经理角色可创建项目
 const canCreate = computed(() =>
-  ['director', 'manager'].includes(userStore.user?.role || 'member')
+  ['director', 'admin', 'manager'].includes(userStore.user?.role || 'member')
 );
 
 function roleLabel(role: string) {

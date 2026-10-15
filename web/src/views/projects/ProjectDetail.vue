@@ -105,6 +105,17 @@
           <el-empty v-else description="暂无小组" :image-size="60" />
         </el-card>
 
+        <!-- 团队介绍 -->
+        <el-card shadow="never" v-if="project.team_intro || canManage" class="edit-card">
+          <template #header>
+            <span class="card-title">团队介绍</span>
+          </template>
+          <div v-if="project.team_intro" class="team-intro-content">
+            <MdPreview :content="project.team_intro" />
+          </div>
+          <div v-else class="text-muted">暂未填写团队介绍</div>
+        </el-card>
+
         <!-- 项目信息编辑 -->
         <el-card shadow="never" v-if="canManage" class="edit-card">
           <template #header>
@@ -116,6 +127,16 @@
             </el-form-item>
             <el-form-item label="项目描述">
               <el-input v-model="editForm.description" type="textarea" :rows="2" />
+            </el-form-item>
+            <el-form-item label="团队介绍（支持 Markdown）">
+              <el-input
+                v-model="editForm.teamIntro"
+                type="textarea"
+                :rows="4"
+                placeholder="介绍项目团队的组织结构、分工与协作方式等"
+                maxlength="2000"
+                show-word-limit
+              />
             </el-form-item>
             <el-form-item label="项目状态">
               <el-select v-model="editForm.status" style="width: 100%">
@@ -241,6 +262,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { projectApi, userApi } from '../../api';
 import { useUserStore } from '../../stores/user';
 import { useAppStore } from '../../stores/app';
+import MdPreview from '../../components/MdPreview.vue';
 import type { Project, ProjectGroup, ProjectMember } from '../../types';
 
 const route = useRoute();
@@ -291,7 +313,7 @@ function memberGroupLabel(m: ProjectMember): string {
 }
 
 // ==================== 项目信息编辑 ====================
-const editForm = reactive({ name: '', description: '', status: 'active' });
+const editForm = reactive({ name: '', description: '', status: 'active', teamIntro: '' });
 const savingProject = ref(false);
 
 async function handleUpdateProject() {
@@ -301,6 +323,7 @@ async function handleUpdateProject() {
       name: editForm.name,
       description: editForm.description,
       status: editForm.status,
+      teamIntro: editForm.teamIntro,
     });
     ElMessage.success('项目已更新');
     loadProject();
@@ -451,6 +474,7 @@ async function loadProject() {
       editForm.name = found.name;
       editForm.description = found.description || '';
       editForm.status = found.status;
+      editForm.teamIntro = found.team_intro || '';
     }
   } finally {
     loading.value = false;
@@ -545,5 +569,13 @@ onMounted(loadProject);
 
 .edit-card {
   margin-top: 16px;
+}
+
+/* 团队介绍 */
+.team-intro-content {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #303133;
+  word-break: break-word;
 }
 </style>

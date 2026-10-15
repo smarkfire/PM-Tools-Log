@@ -39,9 +39,9 @@ export const userApi = {
 // ==================== 项目 ====================
 export const projectApi = {
   list: () => request.get<Project[]>('/projects'),
-  create: (data: { name: string; description?: string; startDate?: string; endDate?: string }) =>
+  create: (data: { name: string; description?: string; teamIntro?: string; startDate?: string; endDate?: string }) =>
     request.post('/projects', data),
-  update: (id: number, data: Partial<Project>) => request.put(`/projects/${id}`, data),
+  update: (id: number, data: Partial<Project> & { teamIntro?: string }) => request.put(`/projects/${id}`, data),
   addMember: (
     projectId: number,
     data: { userId: number; projectRole: string; groupId?: number; groupIds?: number[] }
@@ -290,7 +290,15 @@ export interface MenuVisibility {
   prompts: boolean;
   users: boolean;
   aiSettings: boolean;
+  /** 以下菜单支持按角色配置可见性（默认可见） */
+  dashboard?: boolean;
+  inbox?: boolean;
+  approvals?: boolean;
+  feedback?: boolean;
 }
+
+/** 角色菜单可见性配置：角色 → 菜单开关 */
+export type RoleMenuConfig = Record<string, Record<string, boolean>>;
 
 export const configApi = {
   menus: () => request.get<{ menus: MenuVisibility }>('/config/menus'),

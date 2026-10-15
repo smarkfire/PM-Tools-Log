@@ -104,6 +104,59 @@
       </el-col>
     </el-row>
 
+    <!-- ==================== 角色菜单可见性 ==================== -->
+    <el-row :gutter="16" style="margin-top: 16px">
+      <el-col :span="24">
+        <el-card shadow="never" v-loading="loadingRoleMenus">
+          <template #header>
+            <div class="card-header-row">
+              <span>角色菜单可见性</span>
+              <el-tag size="small" type="info">按角色控制菜单是否可见（与全局开关同时生效）</el-tag>
+            </div>
+          </template>
+
+          <el-alert
+            type="info"
+            :closable="false"
+            show-icon
+            title="菜单最终可见 = 全局开关开启 且 当前角色开关开启；用户管理/系统设置仅系统管理员可见，不在此配置"
+            style="margin-bottom: 16px"
+          />
+
+          <el-table v-if="!isMobile" :data="roleMenuRows" border size="small">
+            <el-table-column prop="label" label="菜单" width="130" fixed="left" />
+            <el-table-column
+              v-for="r in ROLE_OPTIONS"
+              :key="r.value"
+              :label="r.label"
+              min-width="110"
+              align="center"
+            >
+              <template #default="{ row }">
+                <el-switch v-model="roleMenus[r.value][row.key]" />
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <!-- 移动端：逐角色折叠配置 -->
+          <el-collapse v-else v-model="activeRolePanel">
+            <el-collapse-item v-for="r in ROLE_OPTIONS" :key="r.value" :title="r.label" :name="r.value">
+              <div v-for="m in ROLE_MENU_ITEMS" :key="m.key" class="menu-switch-item">
+                <div class="menu-switch-info">
+                  <div class="menu-switch-name">{{ m.label }}</div>
+                </div>
+                <el-switch v-model="roleMenus[r.value][m.key]" />
+              </div>
+            </el-collapse-item>
+          </el-collapse>
+
+          <div class="save-bar">
+            <el-button type="primary" :loading="savingRoleMenus" @click="saveRoleMenus">保存角色菜单配置</el-button>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
+
     <!-- ==================== 版本管理 ==================== -->
     <el-row :gutter="16" style="margin-top: 16px">
       <el-col :xs="24" :md="10">
@@ -202,10 +255,11 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { onMounted, computed, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { adminConfigApi, versionApi, feedbackApi, type AppVersion, type Feedback } from '../../api';
 import { useConfigStore } from '../../stores/config';
+import { useAppStore } from '../../stores/app';
 
 function formatTime(t: string) {
   return new Date(t).toLocaleString('zh-CN', { hour12: false });
@@ -317,9 +371,88 @@ const menuItems = [
   { key: 'menu_reports', label: '报告中心', desc: '周报/月报生成与查看' },
   { key: 'menu_chat', label: 'AI 助手', desc: 'AI 对话功能' },
   { key: 'menu_prompts', label: '提示词配置', desc: '用户自定义提示词' },
-  { key: 'menu_users', label: '用户管理', desc: '仅项目总监可见' },
+  { key: 'menu_users', label: '用户管理', desc: '仅系统管理员可见' },
   { key: 'menu_ai_settings', label: '个人 AI 配置', desc: '用户配置自己的 API Key' },
 ] as const;
+
+// ==================== 角色菜单可见性 ====================
+const appStore = useAppStore();
+const isMobile = computed(() => appStore.isMobile);
+
+/** 可配置的角色 */
+const ROLE_OPTIONS = [
+  { value: 'director', label: '项目总监' },
+  { value: 'admin', label: '系统管理员' },
+  { value: 'manager', label: '项目经理' },
+  { value: 'leader', label: '小组长' },
+  { value: 'member', label: '成员' },
+] as const;
+
+/** 可按角色配置的菜单（用户管理/系统设置为系统管理员专属，不在此列） */
+const ROLE_MENU_ITEMS = [
+  { key: 'dashboard', label: '工作台' },
+  { key: 'logsWrite', label: '填写日志' },
+  { key: 'logs', label: '我的日志' },
+  { key: 'logsAll', label: '团队日志' },
+  { key: 'projects', label: '项目管理' },
+  { key: 'reports', label: '报告中心' },
+  { key: 'chat', label: 'AI 助手' },
+  { key: 'inbox', label: '收件箱' },
+  { key: 'approvals', label: '审批中心' },
+  { key: 'feedback', label: '意见反馈' },
+  { key: 'prompts', label: '提示词配置' },
+] as const;
+
+/** 角色 × 菜单 开关矩阵（本地编辑态，默认全部可见） */
+function buildDefaultRoleMenus(): Record<string, Record<string, boolean>> {
+  const m: Record<string, Record<string, boolean>> = {};
+  for (const r of ROLE_OPTIONS) {
+    m[r.value] = {};
+    for (const item of ROLE_MENU_ITEMS) m[r.value][item.key] = true;
+  }
+  return m;
+}
+
+const roleMenus = reactive(buildDefaultRoleMenus());
+const roleMenuRows = ROLE_MENU_ITEMS.map((m) => ({ ...m }));
+const loadingRoleMenus = ref(false);
+const savingRoleMenus = ref(false);
+const activeRolePanel = ref<string[]>(['director']);
+
+/** 加载服务端 role_menus 配置（JSON 字符串），未配置的项保持默认可见 */
+function applyRoleMenus(raw?: string) {
+  const def = buildDefaultRoleMenus();
+  try {
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (parsed && typeof parsed === 'object') {
+      for (const r of ROLE_OPTIONS) {
+        if (parsed[r.value] && typeof parsed[r.value] === 'object') {
+          for (const item of ROLE_MENU_ITEMS) {
+            if (typeof parsed[r.value][item.key] === 'boolean') {
+              def[r.value][item.key] = parsed[r.value][item.key];
+            }
+          }
+        }
+      }
+    }
+  } catch {
+    // 配置损坏时按默认处理
+  }
+  for (const r of ROLE_OPTIONS) {
+    for (const item of ROLE_MENU_ITEMS) roleMenus[r.value][item.key] = def[r.value][item.key];
+  }
+}
+
+async function saveRoleMenus() {
+  savingRoleMenus.value = true;
+  try {
+    await adminConfigApi.update({ role_menus: JSON.stringify(roleMenus) });
+    ElMessage.success('角色菜单配置已保存，已实时生效');
+    await configStore.fetchMenus();
+  } finally {
+    savingRoleMenus.value = false;
+  }
+}
 
 onMounted(() => {
   loadConfig();
@@ -329,6 +462,7 @@ onMounted(() => {
 
 async function loadConfig() {
   loading.value = true;
+  loadingRoleMenus.value = true;
   try {
     const res = await adminConfigApi.get();
     const data = res.data;
@@ -341,8 +475,10 @@ async function loadConfig() {
     for (const m of menuItems) {
       (menuState as any)[m.key] = String((data as any)[m.key]) !== 'false';
     }
+    applyRoleMenus(String((data as any).role_menus || ''));
   } finally {
     loading.value = false;
+    loadingRoleMenus.value = false;
   }
 }
 

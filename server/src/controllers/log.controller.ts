@@ -23,7 +23,7 @@ interface LogGroupInput {
 
 /**
  * 校验日志的小组标记：
- * - 必须关联项目；仅项目成员可标记
+ * - 必须关联项目；所有用户均可标记（能选到该项目即可见该项目）
  * - 所标记的小组必须属于该项目
  */
 async function validateLogGroups(
@@ -33,11 +33,6 @@ async function validateLogGroups(
 ): Promise<string | null> {
   if (!Array.isArray(groups) || groups.length === 0) return null;
   if (!projectId) return '日志未关联项目，不能标记小组';
-  const isMember = await queryOne(
-    'SELECT 1 FROM project_members WHERE user_id = $1 AND project_id = $2',
-    [userId, projectId]
-  );
-  if (!isMember) return '仅项目成员可标记小组';
   const ids = groups.map((g) => g.groupId);
   if (ids.some((i) => typeof i !== 'number')) return '小组参数无效';
   const valid = await queryMany<{ id: number }>(
@@ -224,6 +219,11 @@ export async function saveLog(req: Request, res: Response) {
     res.status(400).json(fail('日志日期和内容为必填项'));
     return;
   }
+  // 所属项目必填
+  if (!projectId) {
+    res.status(400).json(fail('所属项目为必填项'));
+    return;
+  }
   // 小组标记校验（未传 groups 时不改动既有标记）
   const groupsProvided = groups !== undefined;
   if (groupsProvided) {
@@ -237,6 +237,17 @@ export async function saveLog(req: Request, res: Response) {
     'SELECT id FROM work_logs WHERE user_id = $1 AND log_date = $2',
     [userId, logDate]
   );
+  if (!existing) {
+    // 新建日志：仅可填写本周内的日期（跨周的历史修改需走审批流程）
+    const weekCheck = await queryOne<{ ok: boolean }>(
+      `SELECT ($1::date >= date_trunc('week', CURRENT_DATE)::date) AS ok`,
+      [logDate]
+    );
+    if (!weekCheck?.ok) {
+      res.status(400).json(fail('只能填写本周内的日志，历史周需按审批流程处理'));
+      return;
+    }
+  }
   if (existing) {
     // 跨周修改校验：非本周的日志需审批（项目总监除外）
     const editable = await queryOne<{ in_week: boolean }>(
@@ -246,7 +257,7 @@ export async function saveLog(req: Request, res: Response) {
     );
     if (!editable?.in_week) {
       const meRole = await queryOne<{ role: string }>('SELECT role FROM users WHERE id = $1', [userId]);
-      if (meRole?.role !== 'director') {
+      if (meRole?.role !== 'director' && meRole?.role !== 'admin') {
         const approval = await queryOne<{ id: number }>(
           `SELECT id FROM edit_approvals
            WHERE user_id = $1 AND target_type = 'log' AND target_id = $2 AND status = 'approved'

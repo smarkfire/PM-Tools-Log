@@ -2,8 +2,8 @@
  * 类型定义
  */
 
-/** 全局角色 */
-export type GlobalRole = 'director' | 'manager' | 'leader' | 'member';
+/** 全局角色（admin 为系统管理员，与项目总监同等系统权限） */
+export type GlobalRole = 'director' | 'admin' | 'manager' | 'leader' | 'member';
 
 /** 项目内角色 */
 export type ProjectRole = 'manager' | 'leader' | 'member';

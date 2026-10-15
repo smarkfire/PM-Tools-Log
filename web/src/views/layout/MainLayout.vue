@@ -42,6 +42,12 @@
         </div>
 
         <div class="header-right">
+          <!-- 消息提醒：点击进入收件箱 -->
+          <div class="notice-btn" @click="router.push('/inbox')">
+            <el-badge :value="unreadCount" :max="99" :hidden="unreadCount === 0">
+              <el-icon :size="20"><Bell /></el-icon>
+            </el-badge>
+          </div>
           <el-dropdown trigger="click" @command="handleCommand">
             <div class="user-info">
               <el-avatar :size="32" class="user-avatar">
@@ -75,12 +81,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessageBox } from 'element-plus';
 import { useUserStore } from '../../stores/user';
 import { useAppStore } from '../../stores/app';
 import { useConfigStore } from '../../stores/config';
+import { notificationApi } from '../../api';
 import SidebarContent from './SidebarContent.vue';
 
 const route = useRoute();
@@ -94,6 +101,29 @@ const collapsed = ref(false);
 
 const isMobile = computed(() => appStore.isMobile);
 const routeTitle = computed(() => (route.meta.title as string) || '');
+
+// 顶栏消息提醒：未读数轮询（60s 一次）
+const unreadCount = ref(0);
+let unreadTimer: ReturnType<typeof setInterval> | undefined;
+
+async function refreshUnread() {
+  if (!userStore.isLoggedIn) return;
+  try {
+    const res = await notificationApi.unreadCount();
+    unreadCount.value = res.data.count || 0;
+  } catch {
+    // 忽略轮询失败
+  }
+}
+
+onMounted(() => {
+  refreshUnread();
+  unreadTimer = setInterval(refreshUnread, 60_000);
+});
+
+onUnmounted(() => {
+  if (unreadTimer) clearInterval(unreadTimer);
+});
 
 function handleNavigate() {
   drawerVisible.value = false;
@@ -161,6 +191,19 @@ function handleCommand(command: string) {
 .header-right {
   display: flex;
   align-items: center;
+  gap: 18px;
+}
+
+/* 消息提醒图标 */
+.notice-btn {
+  cursor: pointer;
+  color: #606266;
+  display: flex;
+  align-items: center;
+}
+
+.notice-btn:hover {
+  color: #409eff;
 }
 
 .user-info {

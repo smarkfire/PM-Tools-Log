@@ -7,7 +7,7 @@ import { success, fail } from '../utils/response';
 import { isDirector } from '../services/permission.service';
 import { GlobalRole } from '../types';
 
-const VALID_ROLES: GlobalRole[] = ['director', 'manager', 'leader', 'member'];
+const VALID_ROLES: GlobalRole[] = ['director', 'admin', 'manager', 'leader', 'member'];
 
 /**
  * 获取用户列表（仅总监）
@@ -59,8 +59,8 @@ export async function updateUserRole(req: Request, res: Response) {
     res.status(400).json(fail('无效的角色类型'));
     return;
   }
-  if (targetId === currentUserId && role !== 'director') {
-    res.status(400).json(fail('不能降级自己的总监角色'));
+  if (targetId === currentUserId && role !== 'director' && role !== 'admin') {
+    res.status(400).json(fail('不能移除自己的系统管理员角色'));
     return;
   }
   const user = await queryOne('SELECT id FROM users WHERE id = $1', [targetId]);

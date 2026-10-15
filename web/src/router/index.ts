@@ -80,13 +80,13 @@ const routes: RouteRecordRaw[] = [
         path: 'users',
         name: 'Users',
         component: () => import('../views/settings/UserManagement.vue'),
-        meta: { title: '用户管理', roles: ['director'] },
+        meta: { title: '用户管理', roles: ['director', 'admin'] },
       },
       {
         path: 'admin/settings',
         name: 'AdminSettings',
         component: () => import('../views/settings/AdminSettings.vue'),
-        meta: { title: '系统设置', roles: ['director'] },
+        meta: { title: '系统设置', roles: ['director', 'admin'] },
       },
       {
         path: 'inbox',

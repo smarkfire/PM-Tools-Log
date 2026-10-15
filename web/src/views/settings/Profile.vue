@@ -110,6 +110,9 @@
             </el-form-item>
             <el-form-item label="新密码" prop="newPassword">
               <el-input v-model="pwdForm.newPassword" type="password" show-password />
+              <div class="pwd-strength-tip">
+                需 8~64 位，且至少包含大写字母、小写字母、数字、特殊字符中的三类
+              </div>
             </el-form-item>
             <el-form-item label="确认密码" prop="confirmPassword">
               <el-input v-model="pwdForm.confirmPassword" type="password" show-password />
@@ -160,7 +163,24 @@ const pwdRules = {
   oldPassword: [{ required: true, message: '请输入旧密码', trigger: 'blur' }],
   newPassword: [
     { required: true, message: '请输入新密码', trigger: 'blur' },
-    { min: 6, message: '密码长度至少6位', trigger: 'blur' },
+    {
+      validator: (_rule: any, value: string, callback: any) => {
+        if (!value) return callback();
+        if (value.length < 8 || value.length > 64) {
+          return callback(new Error('密码长度需为 8~64 位'));
+        }
+        let kinds = 0;
+        if (/[A-Z]/.test(value)) kinds++;
+        if (/[a-z]/.test(value)) kinds++;
+        if (/[0-9]/.test(value)) kinds++;
+        if (/[^A-Za-z0-9]/.test(value)) kinds++;
+        if (kinds < 3) {
+          return callback(new Error('密码强度不足：需包含大写字母、小写字母、数字、特殊字符中的至少三类'));
+        }
+        callback();
+      },
+      trigger: 'blur',
+    },
   ],
   confirmPassword: [
     {
@@ -366,5 +386,14 @@ onMounted(() => {
 .m-group {
   font-size: 12px;
   color: #909399;
+}
+
+/* 密码强度提示 */
+.pwd-strength-tip {
+  width: 100%;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.5;
 }
 </style>

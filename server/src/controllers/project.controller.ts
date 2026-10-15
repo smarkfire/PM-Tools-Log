@@ -123,23 +123,24 @@ export async function listProjects(req: Request, res: Response) {
  */
 export async function createProject(req: Request, res: Response) {
   const userId = req.authUser!.id;
-  const { name, description, startDate, endDate } = req.body || {};
+  const { name, description, teamIntro, startDate, endDate } = req.body || {};
   if (!name?.trim()) {
     res.status(400).json(fail('项目名称为必填项'));
     return;
   }
   const user = await queryOne<{ role: string }>('SELECT role FROM users WHERE id = $1', [userId]);
-  const isManagerGlobal = user?.role === 'manager' || user?.role === 'director';
+  const isManagerGlobal =
+    user?.role === 'manager' || user?.role === 'director' || user?.role === 'admin';
   if (!isManagerGlobal) {
-    // 非总监且全局角色非经理的用户无权创建项目
-    res.status(403).json(fail('无权限：仅项目总监或项目经理可创建项目', 403));
+    // 非总监/管理员且全局角色非经理的用户无权创建项目
+    res.status(403).json(fail('无权限：仅项目总监、系统管理员或项目经理可创建项目', 403));
     return;
   }
 
   const project = await queryOne(
-    `INSERT INTO projects (name, description, start_date, end_date, created_by)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [name.trim(), description || null, startDate || null, endDate || null, userId]
+    `INSERT INTO projects (name, description, team_intro, start_date, end_date, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [name.trim(), description || null, teamIntro || null, startDate || null, endDate || null, userId]
   );
   // 创建者自动成为该项目的项目经理
   await queryOne(
@@ -160,7 +161,7 @@ export async function updateProject(req: Request, res: Response) {
     res.status(403).json(fail('无权限：仅项目总监或该项目经理可编辑项目', 403));
     return;
   }
-  const { name, description, status, startDate, endDate } = req.body || {};
+  const { name, description, status, startDate, endDate, teamIntro } = req.body || {};
   if (name !== undefined && !name?.trim()) {
     res.status(400).json(fail('项目名称不能为空'));
     return;
@@ -172,9 +173,10 @@ export async function updateProject(req: Request, res: Response) {
        status = COALESCE($3, status),
        start_date = COALESCE($4, start_date),
        end_date = COALESCE($5, end_date),
+       team_intro = COALESCE($6, team_intro),
        updated_at = NOW()
-     WHERE id = $6 RETURNING *`,
-    [name, description, status, startDate, endDate, projectId]
+     WHERE id = $7 RETURNING *`,
+    [name, description, status, startDate, endDate, teamIntro, projectId]
   );
   if (!project) {
     res.status(404).json(fail('项目不存在'));

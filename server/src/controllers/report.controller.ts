@@ -421,7 +421,7 @@ export async function updateReport(req: Request, res: Response) {
   );
   if (!editable?.in_week) {
     const meRole = await queryOne<{ role: string }>('SELECT role FROM users WHERE id = $1', [currentUserId]);
-    if (meRole?.role !== 'director') {
+    if (meRole?.role !== 'director' && meRole?.role !== 'admin') {
       const approval = await queryOne<{ id: number }>(
         `SELECT id FROM edit_approvals
          WHERE user_id = $1 AND target_type = 'report' AND target_id = $2 AND status = 'approved'

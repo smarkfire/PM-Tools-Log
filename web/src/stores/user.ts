@@ -20,10 +20,12 @@ export const useUserStore = defineStore('user', {
 
   getters: {
     isLoggedIn: (state) => !!state.token,
-    isDirector: (state) => state.user?.role === 'director',
+    /** 系统管理员（项目总监或系统管理员角色） */
+    isDirector: (state) => state.user?.role === 'director' || state.user?.role === 'admin',
     roleLabel(): string {
       const map: Record<string, string> = {
         director: '项目总监',
+        admin: '系统管理员',
         manager: '项目经理',
         leader: '小组长',
         member: '成员',
