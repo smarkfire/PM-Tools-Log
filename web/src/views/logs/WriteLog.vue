@@ -64,8 +64,6 @@
                   <el-select
                     v-model="groupSelection"
                     multiple
-                    collapse-tags
-                    collapse-tags-tooltip
                     clearable
                     placeholder="选择本篇日志涉及的小组（可选）"
                     style="width: 100%"
@@ -174,20 +172,29 @@
             {{ optimizing ? 'AI 正在优化中...' : 'AI 优化日志' }}
           </el-button>
 
-          <!-- 优化结果 -->
+          <!-- 优化结果：Markdown 编辑 / 预览 -->
           <div v-if="optimizedContent" class="optimize-result">
             <div class="result-header">
-              <span>优化结果（可直接编辑）</span>
+              <el-radio-group v-model="resultView" size="small">
+                <el-radio-button value="edit">编辑</el-radio-button>
+                <el-radio-button value="preview">预览</el-radio-button>
+              </el-radio-group>
               <el-button link type="primary" size="small" @click="copyOptimized">
                 <el-icon><CopyDocument /></el-icon>复制
               </el-button>
             </div>
             <el-input
+              v-if="resultView === 'edit'"
               v-model="optimizedContent"
               type="textarea"
               :rows="12"
               class="result-textarea"
+              placeholder="支持 Markdown 语法：# 标题、**加粗**、- 列表 等"
             />
+            <div v-else class="result-preview">
+              <MdPreview :content="optimizedContent" />
+            </div>
+            <div class="result-tip">默认展示渲染预览，切到"编辑"可直接修改 Markdown 源文</div>
           </div>
         </el-card>
 
@@ -219,6 +226,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { logApi, projectApi, promptApi, chatApi } from '../../api';
 import { useUserStore } from '../../stores/user';
 import { currentWeekMonday, formatDate } from '../../utils/date';
+import MdPreview from '../../components/MdPreview.vue';
 import type { Project, UserPrompt } from '../../types';
 
 const userStore = useUserStore();
@@ -255,6 +263,7 @@ const form = reactive({
 });
 
 const optimizedContent = ref('');
+const resultView = ref<'edit' | 'preview'>('preview');
 const optimizing = ref(false);
 const saving = ref(false);
 
@@ -367,6 +376,7 @@ async function handleOptimize() {
     });
     optimizedContent.value = res.data.optimizedContent;
     form.aiProvider = res.data.provider;
+    resultView.value = 'preview';
     ElMessage.success('AI 优化完成');
   } finally {
     optimizing.value = false;
@@ -500,6 +510,24 @@ async function handleSave() {
 
 .result-textarea :deep(.el-textarea__inner) {
   line-height: 1.7;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 13px;
+}
+
+.result-preview {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  padding: 4px 12px;
+  min-height: 220px;
+  max-height: 460px;
+  overflow: auto;
+  background: var(--el-bg-color);
+}
+
+.result-tip {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 6px;
 }
 
 .save-card .save-tip {
