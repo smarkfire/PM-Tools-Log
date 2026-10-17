@@ -99,7 +99,46 @@
               </el-col>
             </el-row>
 
-            <el-form-item label="今日工作内容（可直接写流水账，稍后用 AI 优化）">
+            <!-- 填写要点（可折叠，记住展开状态） -->
+            <el-collapse v-model="tipsVisible" class="write-tips">
+              <el-collapse-item name="open">
+                <template #title>
+                  <span class="write-tips-title">
+                    <el-icon><InfoFilled /></el-icon>
+                    填写要点：什么样的日志算好日志？
+                  </span>
+                </template>
+                <div class="write-tips-body">
+                  <p class="write-tips-slogan">
+                    标准：别人不看代码、不开会，也能知道你这天<strong>干了什么、干到什么程度、明天从哪继续</strong>。
+                  </p>
+                  <ol>
+                    <li><strong>做了什么</strong>：具体到任务，不写笼统词——写“修复订单导出超时，改用分页查询”，别写“处理了些开发工作”</li>
+                    <li><strong>进展结果</strong>：完成 / 进行中（百分比）/ 受阻，带可验证产出（接口数、用例数、Bug 编号）</li>
+                    <li><strong>工时投入</strong>：如实填写，跨组工作按组分配，这是统计与报告的数据基础</li>
+                    <li><strong>问题风险</strong>：卡点、需要谁协助、有何风险——问题早暴露一天，损失就小一分</li>
+                    <li><strong>后续计划</strong>：一两句话即可，让工作有连续性</li>
+                  </ol>
+                  <pre class="write-tips-template">【今日完成】登录模块联调完成，修复3个Bug
+【进行中】订单导出优化（80%）
+【问题】测试环境数据库不稳定，等待运维处理
+【明日计划】导出功能自测并提测</pre>
+                </div>
+              </el-collapse-item>
+            </el-collapse>
+
+            <el-form-item>
+              <template #label>
+                <span class="content-label">
+                  今日工作内容（可直接写流水账，稍后用 AI 优化）
+                  <el-tooltip
+                    content="好日志五要素：做了什么 / 进展结果 / 工时投入 / 问题风险 / 后续计划"
+                    placement="top"
+                  >
+                    <el-icon class="content-help"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+              </template>
               <el-input
                 v-model="form.content"
                 type="textarea"
@@ -244,6 +283,11 @@ const router = useRouter();
 // 编辑模式：?date=YYYY-MM-DD 时加载当天已有日志
 const editDate = computed(() => (route.query.date as string) || '');
 const isEdit = computed(() => !!editDate.value);
+
+// 填写要点折叠面板（记住展开状态）
+const TIPS_KEY = 'logmate_write_tips_open';
+const tipsVisible = ref<string[]>(localStorage.getItem(TIPS_KEY) === '1' ? ['open'] : []);
+watch(tipsVisible, (v) => localStorage.setItem(TIPS_KEY, v.includes('open') ? '1' : '0'));
 
 // 可填写日期范围：本周一 ~ 本周日（编辑模式日期锁定为原日志日期）
 const weekMonday = currentWeekMonday();
@@ -412,7 +456,7 @@ async function handleSave() {
     let action = 'close';
     try {
       await ElMessageBox.confirm(
-        '当前日志尚未使用 AI 优化，保存后将以原始内容存档（可能影响报告生成质量）。建议先使用 AI 优化。',
+        '当前日志尚未使用 AI 优化，保存后将以原始内容存档（可能影响报告生成质量）。\nAI 优化会按五要素自动整理：完成事项、进展结果、工时投入、问题风险、后续计划。建议先优化。',
         '未使用 AI 优化',
         {
           type: 'warning',
@@ -572,5 +616,84 @@ async function handleSave() {
 .group-hours-exceed {
   color: var(--danger-color);
   font-weight: 500;
+}
+
+/* ==================== 填写要点 ==================== */
+.write-tips {
+  margin-bottom: 18px;
+  border: 1px dashed var(--border-color, #dcdfe6);
+  border-radius: 8px;
+  background: var(--bg-hover, #f8f9fb);
+}
+
+.write-tips :deep(.el-collapse-item__header) {
+  padding: 0 12px;
+  background: transparent;
+}
+
+.write-tips :deep(.el-collapse-item__wrap) {
+  background: transparent;
+  border-bottom: none;
+}
+
+.write-tips :deep(.el-collapse-item__content) {
+  padding: 0 16px 14px;
+}
+
+.write-tips-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary-color, #409eff);
+}
+
+.write-tips-body {
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--text-secondary, #606266);
+}
+
+.write-tips-slogan {
+  margin: 0 0 6px;
+}
+
+.write-tips-body ol {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+
+.write-tips-body strong {
+  color: var(--text-primary, #303133);
+}
+
+.write-tips-template {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--bg-page, #f5f7fa);
+  border: 1px solid var(--border-color, #ebeef5);
+  font-size: 12px;
+  line-height: 1.8;
+  font-family: inherit;
+  white-space: pre-wrap;
+  color: var(--text-secondary, #606266);
+}
+
+.content-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.content-help {
+  color: var(--text-placeholder, #a8abb2);
+  cursor: help;
+  font-size: 14px;
+}
+
+.content-help:hover {
+  color: var(--primary-color, #409eff);
 }
 </style>
