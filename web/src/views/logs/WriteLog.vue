@@ -285,7 +285,7 @@ const editDate = computed(() => (route.query.date as string) || '');
 const isEdit = computed(() => !!editDate.value);
 
 // 填写要点折叠面板（记住展开状态）
-const TIPS_KEY = 'logmate_write_tips_open';
+const TIPS_KEY = 'matelog_write_tips_open';
 const tipsVisible = ref<string[]>(localStorage.getItem(TIPS_KEY) === '1' ? ['open'] : []);
 watch(tipsVisible, (v) => localStorage.setItem(TIPS_KEY, v.includes('open') ? '1' : '0'));
 

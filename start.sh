@@ -1,5 +1,5 @@
 #!/bin/bash
-# LogMate 络脉 - 一键启动脚本
+# MateLog 脉络 - 一键启动脚本
 # 用法: ./start.sh [dev|build]
 
 set -e
@@ -8,7 +8,7 @@ cd "$(dirname "$0")"
 MODE=${1:-dev}
 
 echo "=========================================="
-echo "  LogMate 络脉启动脚本 (模式: $MODE)"
+echo "  MateLog 脉络启动脚本 (模式: $MODE)"
 echo "=========================================="
 
 # 1. 检查并启动 PostgreSQL

@@ -6,7 +6,7 @@
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
     :style="{ color }"
-    aria-label="LogMate 络脉"
+    aria-label="MateLog 脉络"
   >
     <!-- 主脉：由细到粗向上汇聚 -->
     <path

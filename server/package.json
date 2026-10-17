@@ -1,7 +1,7 @@
 {
-  "name": "logmate-server",
+  "name": "matelog-server",
   "version": "1.2.1",
-  "description": "LogMate 络脉后端 - Express + TypeScript + PostgreSQL",
+  "description": "MateLog 脉络后端 - Express + TypeScript + PostgreSQL",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",

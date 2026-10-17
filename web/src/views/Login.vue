@@ -9,7 +9,8 @@
         <div class="logo-mark">
           <LogoMark :size="30" color="#fff" />
         </div>
-        <h1>LogMate 络脉</h1>
+        <h1>MateLog 脉络</h1>
+        <p class="slogan">一人一记，汇聚成组织的脉络</p>
         <p class="subtitle">项目日志 · AI 优化 · 智能报告</p>
       </div>
 
@@ -163,6 +164,13 @@ async function handleLogin() {
   color: var(--text-primary, #303133);
   font-weight: 700;
   letter-spacing: 0.5px;
+}
+
+.slogan {
+  color: var(--text-secondary, #a3a8b3);
+  font-size: 14px;
+  letter-spacing: 2px;
+  margin-top: 8px;
 }
 
 .subtitle {

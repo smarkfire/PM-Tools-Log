@@ -4,7 +4,7 @@
       <div class="logo-mark">
         <LogoMark :size="20" color="#fff" />
       </div>
-      <span v-if="!collapsed" class="logo-text">LogMate 络脉</span>
+      <span v-if="!collapsed" class="logo-text">MateLog 脉络</span>
     </div>
 
     <el-menu

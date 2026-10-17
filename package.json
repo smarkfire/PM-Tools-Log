@@ -1,8 +1,8 @@
 {
-  "name": "logmate",
+  "name": "matelog",
   "version": "1.2.1",
   "private": true,
-  "description": "LogMate 络脉（Vercel 部署用根依赖，供 api/ Serverless Function 构建）",
+  "description": "MateLog 脉络（Vercel 部署用根依赖，供 api/ Serverless Function 构建）",
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",

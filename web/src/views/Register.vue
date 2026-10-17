@@ -9,7 +9,7 @@
           <LogoMark :size="30" color="#fff" />
         </div>
         <h1>注册账号</h1>
-        <p class="subtitle">加入 LogMate 络脉，记录每一天</p>
+        <p class="subtitle">加入 MateLog 脉络，记录每一天</p>
       </div>
 
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top" size="large">
