@@ -87,6 +87,8 @@ export interface WorkLog {
   project_name?: string;
   /** 涉及的小组标记（跨组协作） */
   group_marks?: LogGroupMark[];
+  /** 跨周修改申请状态：none=未申请 pending=待审批 approved=已通过（可编辑一次） */
+  edit_approval_status?: 'none' | 'pending' | 'approved';
 }
 
 export interface LogStats {

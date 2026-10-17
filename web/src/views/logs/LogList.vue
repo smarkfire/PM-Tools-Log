@@ -107,17 +107,35 @@
             <span class="log-datetime">{{ formatDateTime(row.created_at) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column label="操作" width="170" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="viewLog(row)">查看</el-button>
             <el-button
-              v-if="row.user_id === userStore.user?.id"
+              v-if="row.user_id === userStore.user?.id && canDirectEdit(row)"
               link
               type="primary"
               size="small"
               @click="handleEditLog(row)"
             >
               编辑
+            </el-button>
+            <el-button
+              v-else-if="row.user_id === userStore.user?.id && row.edit_approval_status === 'pending'"
+              link
+              type="info"
+              size="small"
+              disabled
+            >
+              审批中
+            </el-button>
+            <el-button
+              v-else-if="row.user_id === userStore.user?.id"
+              link
+              type="warning"
+              size="small"
+              @click="handleApplyEdit(row)"
+            >
+              申请编辑
             </el-button>
             <el-button
               v-if="row.user_id === userStore.user?.id && isInCurrentWeek(row.log_date)"
@@ -200,11 +218,25 @@
       </template>
       <template #footer>
         <el-button
-          v-if="currentLog.user_id === userStore.user?.id"
+          v-if="currentLog.user_id === userStore.user?.id && canDirectEdit(currentLog)"
           type="primary"
           @click="handleEditLog(currentLog)"
         >
           编辑此日志
+        </el-button>
+        <el-button
+          v-else-if="currentLog.user_id === userStore.user?.id && currentLog.edit_approval_status === 'pending'"
+          type="info"
+          disabled
+        >
+          修改申请审批中
+        </el-button>
+        <el-button
+          v-else-if="currentLog.user_id === userStore.user?.id"
+          type="warning"
+          @click="handleApplyEdit(currentLog)"
+        >
+          申请编辑
         </el-button>
         <el-button @click="detailVisible = false">关闭</el-button>
       </template>
@@ -321,15 +353,36 @@ const applySubmitting = ref(false);
 const applyForm = reactive({ reason: '' });
 const applyTarget = ref<WorkLog | null>(null);
 
-/** 编辑自己的日志：本周内直接编辑；跨周需审批（总监除外） */
+/**
+ * 是否可直接编辑：
+ * 总监/系统管理员任意编辑；本周内（周一至周日）的日志直接编辑；
+ * 跨周日志需有审批通过的修改申请（通过后仅可修改一次，保存后失效）
+ */
+function canDirectEdit(log: WorkLog): boolean {
+  if (userStore.isDirector) return true;
+  if (isInCurrentWeek(log.log_date)) return true;
+  return log.edit_approval_status === 'approved';
+}
+
+/** 编辑自己的日志：可编辑的直接进编辑页；跨周未获批的转申请流程 */
 function handleEditLog(log: WorkLog) {
   if (log.user_id !== userStore.user?.id) {
     ElMessage.warning('只能编辑自己的日志');
     return;
   }
-  if (isInCurrentWeek(log.log_date) || userStore.isDirector) {
-    detailVisible.value = false;
-    router.push(`/logs/write?date=${log.log_date}`);
+  if (!canDirectEdit(log)) {
+    handleApplyEdit(log);
+    return;
+  }
+  detailVisible.value = false;
+  router.push(`/logs/write?date=${String(log.log_date).slice(0, 10)}`);
+}
+
+/** 申请修改跨周日志（已有待审批申请时提示，避免重复提交） */
+function handleApplyEdit(log: WorkLog) {
+  if (log.user_id !== userStore.user?.id) return;
+  if (log.edit_approval_status === 'pending') {
+    ElMessage.info('该日志已有待审批的修改申请，请等待审批结果');
     return;
   }
   applyTarget.value = log;

@@ -8,14 +8,17 @@
  */
 export function isInCurrentWeek(dateStr: string): boolean {
   if (!dateStr) return false;
-  const target = new Date(dateStr + 'T00:00:00');
+  // 兼容 YYYY-MM-DD 与带时间的 ISO 格式（后端返回 log_date 可能是 2026-01-01T00:00:00.000Z）
+  const target = new Date(dateStr.slice(0, 10) + 'T00:00:00');
   if (Number.isNaN(target.getTime())) return false;
   const now = new Date();
   // 本周一 00:00
   const day = now.getDay(); // 0=周日
   const diff = day === 0 ? -6 : 1 - day;
   const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diff);
-  return target >= monday;
+  // 下周一 00:00（预填本周未来日期也算本周内）
+  const nextMonday = new Date(monday.getTime() + 7 * 86400000);
+  return target >= monday && target < nextMonday;
 }
 
 /** 判断时间戳/时间字符串是否在当前自然周内 */

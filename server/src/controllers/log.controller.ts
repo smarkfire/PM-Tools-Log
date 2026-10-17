@@ -155,7 +155,14 @@ export async function listLogs(req: Request, res: Response) {
   );
   const logs = await queryMany(
     `SELECT wl.*, u.display_name AS user_name, u.username, p.name AS project_name,
-       ${GROUP_MARKS_SUBSQL}
+       ${GROUP_MARKS_SUBSQL},
+       COALESCE((
+         SELECT a.status FROM edit_approvals a
+         WHERE a.user_id = wl.user_id AND a.target_type = 'log' AND a.target_id = wl.id
+           AND a.status IN ('pending', 'approved')
+         ORDER BY CASE a.status WHEN 'approved' THEN 0 ELSE 1 END, a.id DESC
+         LIMIT 1
+       ), 'none') AS edit_approval_status
      FROM work_logs wl
      JOIN users u ON u.id = wl.user_id
      LEFT JOIN projects p ON p.id = wl.project_id
