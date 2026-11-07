@@ -213,22 +213,29 @@
           </div>
 
           <div class="chat-input-area">
-            <el-input
-              v-model="draftInput"
-              type="textarea"
-              :autosize="{ minRows: 1, maxRows: 4 }"
-              placeholder="补充说明：今天具体做了什么、有什么成果…（Enter 发送，Shift+Enter 换行）"
-              @keydown.enter.exact.prevent="sendDraft"
-            />
-            <el-button
-              type="primary"
-              class="send-btn"
-              :loading="assisting"
-              :disabled="!draftInput.trim()"
-              @click="sendDraft"
-            >
-              发送
-            </el-button>
+            <div class="input-card" :class="{ focused: inputFocused }">
+              <el-input
+                v-model="draftInput"
+                type="textarea"
+                :autosize="{ minRows: 5, maxRows: 12 }"
+                placeholder="补充说明：今天具体做了什么、有什么成果…也可以直接向 AI 提问"
+                @focus="inputFocused = true"
+                @blur="inputFocused = false"
+                @keydown.enter.exact.prevent="sendDraft"
+              />
+              <div class="input-footer">
+                <span class="input-hint">Enter 发送 · Shift+Enter 换行</span>
+                <el-button
+                  type="primary"
+                  class="send-btn"
+                  :loading="assisting"
+                  :disabled="!draftInput.trim()"
+                  @click="sendDraft"
+                >
+                  <el-icon><Promotion /></el-icon>发送
+                </el-button>
+              </div>
+            </div>
           </div>
         </el-card>
       </el-col>
@@ -331,6 +338,7 @@ interface ChatMsg {
 const messages = ref<ChatMsg[]>([]);
 const history = ref<{ role: 'user' | 'assistant'; content: string }[]>([]);
 const draftInput = ref('');
+const inputFocused = ref(false);
 const pendingQuestions = ref<any[]>([]);
 const qaAnswers = ref<Record<number, { choice: string; other: string }>>({});
 const assisting = ref(false);
@@ -802,8 +810,8 @@ async function doSave(pid: number) {
 
 .chat-body {
   flex: 1;
-  height: calc(100vh - 400px);
-  min-height: 480px;
+  height: calc(100vh - 540px);
+  min-height: 420px;
   overflow-y: auto;
   padding: 12px 10px;
   margin-bottom: 12px;
@@ -990,27 +998,61 @@ async function doSave(pid: number) {
   gap: 2px;
 }
 
-/* 输入区（参考 AI 助手） */
+/* 输入区（卡片式，聚焦高亮） */
 .chat-input-area {
+  margin-top: 4px;
+}
+
+.input-card {
+  border: 1px solid var(--el-border-color, #dcdfe6);
+  border-radius: 12px;
+  padding: 8px 12px 6px;
+  background: var(--el-bg-color, #fff);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.input-card.focused {
+  border-color: var(--primary-color, #409eff);
+  box-shadow: 0 0 0 3px rgba(64, 158, 255, 0.1);
+}
+
+.input-card :deep(.el-textarea__inner) {
+  border: none;
+  box-shadow: none;
+  padding: 6px 4px;
+  font-size: 14px;
+  line-height: 1.65;
+  background: transparent;
+  resize: none;
+}
+
+.input-card :deep(.el-textarea__inner::placeholder) {
+  color: var(--text-placeholder, #a8abb2);
+}
+
+.input-footer {
   display: flex;
-  align-items: flex-end;
-  gap: 10px;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
 }
 
-.chat-input-area .el-input {
-  flex: 1;
-}
-
-.chat-input-area :deep(.el-textarea__inner) {
-  border-radius: 10px;
-  padding: 9px 12px;
-  line-height: 1.6;
+.input-hint {
+  font-size: 12px;
+  color: var(--text-placeholder, #a8abb2);
 }
 
 .send-btn {
-  height: 38px;
-  border-radius: 10px;
+  border-radius: 18px;
   padding: 0 20px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.send-btn .el-icon {
+  margin-right: 0;
 }
 
 /* 我的日志抽屉 */
