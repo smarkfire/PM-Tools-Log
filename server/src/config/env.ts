@@ -52,8 +52,8 @@ export const env = {
       model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
     },
     contextMaxLogs: parseInt(process.env.AI_CONTEXT_MAX_LOGS || '50', 10),
-    // AI 请求超时（毫秒）。Vercel 等 Serverless 平台建议设为 50000 以内
-    timeoutMs: parseInt(process.env.AI_TIMEOUT_MS || '120000', 10),
+    // AI 请求超时（毫秒）。流式生成（SSE）覆盖整个响应过程，默认 3 分钟
+    timeoutMs: parseInt(process.env.AI_TIMEOUT_MS || '180000', 10),
   },
 };
 

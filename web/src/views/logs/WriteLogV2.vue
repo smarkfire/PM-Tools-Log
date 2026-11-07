@@ -10,19 +10,27 @@
             </template>
             <div class="tips-popover">
               <p class="tips-slogan">
-                标准：别人不看代码、不开会，也能知道你这天<strong>干了什么、干到什么程度、明天从哪继续</strong>。
+                标准：别人不看代码、不开会，也能知道你这天<strong>干了什么、干到什么程度、明天从哪继续</strong>。AI 按此规范检查并打分（满分 100），<strong>达到 80 分</strong>才能生成定稿。
               </p>
+              <p class="tips-structure-title">标准日志模板（Markdown 层级）：</p>
+              <pre class="tips-template"># 张三 2026-11-07 的日志
+## {项目名称}
+- 投入时长：X小时
+### {小组名称}
+- {功能模块/交付物}：做了什么，有什么成果
+## 明日计划
+- {后续工作安排}
+## 问题与风险
+- {卡点或需要的协助}</pre>
               <ol>
-                <li><strong>做了什么</strong>：写清哪个功能模块或交付物做了什么工作，不写笼统词</li>
-                <li><strong>进展结果</strong>：完成 / 进行中（百分比）/ 受阻，带可验证产出</li>
-                <li><strong>工时投入</strong>：如实填写当天投入工时</li>
-                <li><strong>问题与风险</strong>：卡点、需要的协助，早暴露早解决</li>
-                <li><strong>明日计划</strong>：一两句话，让工作有连续性</li>
+                <li><strong>一级标题</strong>：谁的哪天的日志</li>
+                <li><strong>二级标题</strong>：项目名称（下写当天总投入时长）、明日计划、问题与风险</li>
+                <li><strong>三级标题</strong>：小组名称，组下逐条写事项</li>
+                <li><strong>每条事项</strong>：写清哪个功能模块或哪个交付物做了什么工作、有什么成果，尽量量化</li>
               </ol>
-              <pre class="tips-template">【今日完成】登录模块联调完成，修复3个Bug
-【进行中】订单导出优化（80%）
-【问题】测试环境不稳定，等待运维处理
-【明日计划】导出功能自测并提测</pre>
+              <p class="tips-score">
+                评分构成：事项具体性 30 分 / 成果量化 20 分 / 工时明确 20 分 / 明日计划 15 分 / 问题与风险 15 分
+              </p>
             </div>
           </el-popover>
         </div>
@@ -619,6 +627,17 @@ async function doSave(pid: number) {
 
 .tips-slogan {
   margin: 0 0 6px;
+}
+
+.tips-structure-title {
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+
+.tips-score {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary, #909399);
 }
 
 .tips-template {
