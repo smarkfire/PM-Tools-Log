@@ -4,7 +4,7 @@
       <div class="header-left">
         <div class="page-title">
           填写日志 · 新版
-          <el-popover placement="bottom-start" :width="340" trigger="hover">
+          <el-popover placement="bottom-start" :width="560" trigger="hover" popper-class="tips-popover-popper">
             <template #reference>
               <el-icon class="tips-trigger"><InfoFilled /></el-icon>
             </template>
@@ -631,6 +631,33 @@ async function doSave(pid: number) {
   font-size: 13px;
   color: var(--text-regular, #606266);
   line-height: 1.7;
+  max-height: 480px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+/* 气泡全局样式（popper 渲染在 body 下，需 popper-class 定制） */
+:global(.tips-popover-popper) {
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1);
+}
+
+:global(.tips-popover-popper .tips-popover) {
+  scrollbar-width: thin;
+  scrollbar-color: #d4d7de transparent;
+}
+
+:global(.tips-popover-popper .tips-popover::-webkit-scrollbar) {
+  width: 6px;
+}
+
+:global(.tips-popover-popper .tips-popover::-webkit-scrollbar-thumb) {
+  background: #d4d7de;
+  border-radius: 3px;
+}
+
+:global(.tips-popover-popper .tips-popover::-webkit-scrollbar-track) {
+  background: transparent;
 }
 
 .tips-popover ol {
