@@ -27,7 +27,7 @@
           </el-popover>
         </div>
         <div class="page-desc">
-          左侧维护今日待办，中间与 AI 对话生成今日日志（自动质量检查、追问补全），右侧确认优化稿并保存
+          左侧维护今日待办，中间与 AI 对话生成日志（自动质量检查、追问补全），在对话里确认优化稿并保存
         </div>
       </div>
       <div class="header-tools">
@@ -35,6 +35,7 @@
           v-model="logDate"
           type="date"
           placeholder="日志日期"
+          value-format="YYYY-MM-DD"
           :disabled-date="disableOutOfRangeDate"
           :clearable="false"
           style="width: 140px"
@@ -55,8 +56,8 @@
     />
 
     <el-row :gutter="16">
-      <!-- 左：今日待办（干净清单，实时保存） -->
-      <el-col :xs="24" :md="8">
+      <!-- 左：待办（干净清单，实时保存） -->
+      <el-col :xs="24" :md="7">
         <el-card shadow="never" class="block-card">
           <template #header>
             <div class="card-head-row">
@@ -88,8 +89,8 @@
         </el-card>
       </el-col>
 
-      <!-- 中：今日日志（AI 对话 + 质量检查，AI 助手风格） -->
-      <el-col :xs="24" :md="16">
+      <!-- 右：今日日志 · AI 对话（主区） -->
+      <el-col :xs="24" :md="17">
         <el-card shadow="never" class="block-card chat-card">
           <template #header>
             <div class="card-head-row">
@@ -104,21 +105,50 @@
                 >
                   <el-icon><MagicStick /></el-icon>自动生成日志
                 </el-button>
-                <el-button size="small" @click="router.push('/logs')">
+                <el-button size="small" @click="openMyLogs">
                   <el-icon><Document /></el-icon>我的日志
-                </el-button>
-                <el-button size="small" @click="router.push('/todos')">
-                  <el-icon><List /></el-icon>历史待办
                 </el-button>
               </div>
             </div>
           </template>
 
-          <div class="chat-body">
+          <div class="chat-body" ref="chatBodyEl">
             <div v-for="(m, i) in messages" :key="i" class="chat-msg" :class="m.role">
               <div class="chat-bubble">
                 <MdPreview v-if="m.role === 'assistant'" :content="m.text" />
                 <template v-else>{{ m.text }}</template>
+
+                <!-- 优化后的日志卡片（内嵌在 AI 回复里） -->
+                <div v-if="m.logResult" class="log-result-card">
+                  <div class="result-toolbar">
+                    <el-radio-group v-model="m.viewMode" size="small">
+                      <el-radio-button value="preview">预览</el-radio-button>
+                      <el-radio-button value="edit">编辑</el-radio-button>
+                    </el-radio-group>
+                  </div>
+                  <div v-if="m.viewMode === 'preview'" class="result-preview">
+                    <MdPreview :content="m.logResult.content" />
+                  </div>
+                  <el-input
+                    v-else
+                    v-model="m.logResult.content"
+                    type="textarea"
+                    :rows="12"
+                    class="result-textarea"
+                  />
+                  <div v-if="m.logResult.groups && m.logResult.groups.length" class="group-note">
+                    识别小组：{{ m.logResult.groups.map((g) => g.name).join('、') }}
+                  </div>
+                  <el-button
+                    type="success"
+                    style="width: 100%; margin-top: 12px"
+                    :loading="saving"
+                    :disabled="!m.logResult.content"
+                    @click="saveLog()"
+                  >
+                    <el-icon><Check /></el-icon>确认保存日志
+                  </el-button>
+                </div>
               </div>
             </div>
 
@@ -132,11 +162,20 @@
             <div v-if="pendingQuestions.length" class="qa-panel">
               <div class="qa-title">质量检查发现以下信息需要补充：</div>
               <div v-for="(q, qi) in pendingQuestions" :key="qi" class="qa-item">
-                <div class="qa-question">{{ q.question }}</div>
-                <el-radio-group v-if="q.options && q.options.length" v-model="qaAnswers[qi]" class="qa-options">
-                  <el-radio v-for="opt in q.options" :key="opt" :value="opt">{{ opt }}</el-radio>
-                </el-radio-group>
-                <el-input v-else v-model="qaAnswers[qi]" placeholder="请输入你的回答" />
+                <div class="qa-question">{{ qi + 1 }}. {{ q.question }}</div>
+                <template v-if="q.options && q.options.length">
+                  <el-radio-group v-model="qaAnswers[qi].choice" class="qa-options">
+                    <el-radio v-for="opt in q.options" :key="opt" :value="opt">{{ opt }}</el-radio>
+                    <el-radio value="__other__">其他（自行填写）</el-radio>
+                  </el-radio-group>
+                  <el-input
+                    v-if="qaAnswers[qi].choice === '__other__'"
+                    v-model="qaAnswers[qi].other"
+                    placeholder="请输入其他内容"
+                    style="margin-top: 6px"
+                  />
+                </template>
+                <el-input v-else v-model="qaAnswers[qi].choice" placeholder="请输入你的回答" />
               </div>
               <el-button type="primary" size="small" :loading="assisting" @click="submitAnswers">
                 提交回答
@@ -144,66 +183,55 @@
             </div>
           </div>
 
-          <div class="chat-input-row">
+          <div class="chat-input-area">
             <el-input
               v-model="draftInput"
-              placeholder="补充说明：今天具体做了什么、有什么成果…（回车发送）"
-              @keyup.enter="sendDraft"
-            />
-            <el-button type="primary" size="small" @click="sendDraft">补充</el-button>
-          </div>
-        </el-card>
-      </el-col>
-
-      <!-- 右：优化后的日志 -->
-      <el-col :xs="24" :md="8">
-        <el-card shadow="never" class="block-card">
-          <template #header>
-            <div class="card-head-row">
-              <span class="card-title">优化后的日志</span>
-              <el-tag v-if="result" size="small" type="success">已优化</el-tag>
-            </div>
-          </template>
-
-          <div v-if="result" class="result-area">
-            <div class="result-toolbar">
-              <el-radio-group v-model="resultView" size="small">
-                <el-radio-button value="edit">编辑</el-radio-button>
-                <el-radio-button value="preview">预览</el-radio-button>
-              </el-radio-group>
-            </div>
-
-            <el-input
-              v-if="resultView === 'edit'"
-              v-model="result.content"
               type="textarea"
-              :rows="16"
-              class="result-textarea"
+              :autosize="{ minRows: 1, maxRows: 4 }"
+              placeholder="补充说明：今天具体做了什么、有什么成果…（Enter 发送，Shift+Enter 换行）"
+              @keydown.enter.exact.prevent="sendDraft"
             />
-            <div v-else class="result-preview">
-              <MdPreview :content="result.content" />
-            </div>
-
-            <div v-if="recognizedProject" class="group-note">识别项目：{{ recognizedProject }}</div>
-            <div v-if="result.groups && result.groups.length" class="group-note">
-              识别小组：{{ result.groups.map((g) => g.name).join('、') }}
-            </div>
-
             <el-button
-              type="success"
-              size="large"
-              style="width: 100%; margin-top: 14px"
-              :loading="saving"
-              :disabled="!result.content"
-              @click="saveLog"
+              type="primary"
+              class="send-btn"
+              :loading="assisting"
+              :disabled="!draftInput.trim()"
+              @click="sendDraft"
             >
-              <el-icon><Check /></el-icon>确认保存日志
+              发送
             </el-button>
           </div>
-          <el-empty v-else description="质量检查通过并优化后，日志在此显示" :image-size="80" />
         </el-card>
       </el-col>
     </el-row>
+
+    <!-- 我的日志（最近 5 条，内容可折叠） -->
+    <el-drawer v-model="logsDrawerVisible" title="我的日志（最近 5 条）" size="480px">
+      <div v-if="recentLogs.length" class="recent-logs">
+        <el-collapse>
+          <el-collapse-item v-for="log in recentLogs" :key="log.id">
+            <template #title>
+              <div class="recent-log-title">
+                {{ (log.log_date || '').slice(0, 10) }} 的日志
+                <el-tag
+                  v-if="log.optimized_content"
+                  size="small"
+                  type="success"
+                  style="margin-left: 8px"
+                >已优化</el-tag>
+              </div>
+            </template>
+            <MdPreview :content="log.optimized_content || log.content || ''" />
+          </el-collapse-item>
+        </el-collapse>
+      </div>
+      <el-empty v-else description="还没有写过日志" :image-size="70" />
+      <div class="drawer-footer">
+        <el-button type="primary" plain size="small" @click="router.push('/logs')">
+          查看全部日志
+        </el-button>
+      </div>
+    </el-drawer>
 
     <!-- 项目归属确认（AI 未识别出项目时的兜底） -->
     <el-dialog v-model="saveDialogVisible" title="选择日志所属项目" width="400px">
@@ -224,13 +252,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { chatApi, logApi, projectApi, todoApi, type TodoItem } from '../../api';
 import { currentWeekMonday } from '../../utils/date';
 import MdPreview from '../../components/MdPreview.vue';
-import type { Project } from '../../types';
+import type { Project, WorkLog } from '../../types';
 
 const router = useRouter();
 
@@ -238,7 +266,7 @@ const projects = ref<Project[]>([]);
 const todos = ref<TodoItem[]>([]);
 const newTodoText = ref('');
 
-// 日志日期（默认今天，限本周）与模型（默认已配置的）
+// 日志日期（默认今天，限本周；value-format 保证始终为 YYYY-MM-DD 字符串）与模型
 const today = new Date();
 const logDate = ref(
   `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
@@ -257,21 +285,33 @@ function disableOutOfRangeDate(d: Date): boolean {
 const aiUnavailable = computed(() => !providers.qwenConfigured && !providers.deepseekConfigured);
 
 // 对话与质量检查
-const messages = ref<{ role: 'user' | 'assistant'; text: string }[]>([]);
-const history = ref<{ role: 'user' | 'assistant'; content: string }[]>([]);
-const draftInput = ref('');
-const pendingQuestions = ref<any[]>([]);
-const qaAnswers = ref<Record<number, string>>({});
-const assisting = ref(false);
-const saving = ref(false);
-const resultView = ref<'edit' | 'preview'>('preview');
-const result = ref<{
+interface AssistResult {
   project?: string;
   content: string;
   hours: number | null;
   groups: { name: string; hours: number | null }[];
-} | null>(null);
-const recognizedProject = computed(() => result.value?.project?.trim() || '');
+}
+interface ChatMsg {
+  role: 'user' | 'assistant';
+  text: string;
+  logResult?: AssistResult | null;
+  viewMode?: 'preview' | 'edit';
+}
+const messages = ref<ChatMsg[]>([]);
+const history = ref<{ role: 'user' | 'assistant'; content: string }[]>([]);
+const draftInput = ref('');
+const pendingQuestions = ref<any[]>([]);
+const qaAnswers = ref<Record<number, { choice: string; other: string }>>({});
+const assisting = ref(false);
+const saving = ref(false);
+const chatBodyEl = ref<HTMLElement | null>(null);
+
+// 当前最新的日志优化稿（供保存使用；与对话消息内卡片同一引用）
+const result = ref<AssistResult | null>(null);
+
+// 我的日志抽屉
+const logsDrawerVisible = ref(false);
+const recentLogs = ref<WorkLog[]>([]);
 
 // 保存时的项目兜底弹窗
 const saveDialogVisible = ref(false);
@@ -371,19 +411,23 @@ async function runAssist() {
     const data: any = (res as any).data;
     if (data.action === 'done' && data.result) {
       result.value = data.result;
-      resultView.value = 'preview';
       pendingQuestions.value = [];
       messages.value.push({
         role: 'assistant',
-        text: '✅ 质量检查通过，日志已按「好日志规范」优化生成。\n\n请在右侧检查确认，可直接编辑，确认无误后点击「确认保存日志」。',
+        text: '✅ 质量检查通过，日志已按「好日志规范」优化生成。\n\n请在下方卡片中检查确认，可直接编辑，确认无误后点击「确认保存日志」。',
+        logResult: data.result,
+        viewMode: 'preview',
       });
       history.value.push({
         role: 'assistant',
-        content: '质量检查通过，日志已优化生成，请在右侧确认保存。',
+        content: '质量检查通过，日志已优化生成，请在卡片中确认保存。',
       });
     } else {
       pendingQuestions.value = data.questions || [];
       qaAnswers.value = {};
+      pendingQuestions.value.forEach((_q, i) => {
+        qaAnswers.value[i] = { choice: '', other: '' };
+      });
       const qtext = pendingQuestions.value
         .map(
           (q: any, i: number) =>
@@ -396,6 +440,8 @@ async function runAssist() {
       });
       history.value.push({ role: 'assistant', content: '请补充以下信息：\n' + qtext });
     }
+    await nextTick();
+    chatBodyEl.value?.scrollTo({ top: chatBodyEl.value.scrollHeight, behavior: 'smooth' });
   } catch (e: any) {
     const msg = e?.response?.data?.message || e?.message || '网络异常';
     ElMessage.error('生成失败：' + msg);
@@ -407,7 +453,11 @@ async function runAssist() {
 
 async function submitAnswers() {
   const ansText = pendingQuestions.value
-    .map((_q, i) => `${i + 1}. ${qaAnswers.value[i] || '（未回答）'}`)
+    .map((_q, i) => {
+      const a = qaAnswers.value[i] || { choice: '', other: '' };
+      if (a.choice === '__other__') return `${i + 1}. 其他：${a.other || '（未填写）'}`;
+      return `${i + 1}. ${a.choice || a.other || '（未回答）'}`;
+    })
     .join('\n');
   messages.value.push({ role: 'user', text: '我的回答：\n' + ansText });
   history.value.push({ role: 'user', content: '我的回答：\n' + ansText });
@@ -417,11 +467,21 @@ async function submitAnswers() {
 
 async function sendDraft() {
   const d = draftInput.value.trim();
-  if (!d) return;
+  if (!d || assisting.value) return;
   draftInput.value = '';
   messages.value.push({ role: 'user', text: d });
   history.value.push({ role: 'user', content: '补充说明：' + d });
   runAssist();
+}
+
+async function openMyLogs() {
+  try {
+    const res = await logApi.list({ page: 1, pageSize: 5 });
+    recentLogs.value = (res.data as any)?.list || [];
+  } catch {
+    recentLogs.value = [];
+  }
+  logsDrawerVisible.value = true;
 }
 
 async function saveLog() {
@@ -430,7 +490,7 @@ async function saveLog() {
     return;
   }
   // 项目归属：优先用 AI 识别的项目名匹配用户项目列表；匹配不到弹窗兜底
-  const name = recognizedProject.value;
+  const name = (result.value.project || '').trim();
   const matched = name ? projects.value.find((p) => p.name === name) : null;
   if (matched) {
     await doSave(matched.id);
@@ -553,7 +613,7 @@ async function doSave(pid: number) {
 }
 
 .todo-list {
-  max-height: 520px;
+  max-height: calc(100vh - 380px);
   overflow-y: auto;
 }
 
@@ -589,7 +649,7 @@ async function doSave(pid: number) {
   margin-left: 0;
 }
 
-/* 对话区（AI 助手风格：大高度、沉浸式） */
+/* 对话区（AI 助手风格） */
 .chat-card {
   display: flex;
   flex-direction: column;
@@ -603,10 +663,10 @@ async function doSave(pid: number) {
 
 .chat-body {
   flex: 1;
-  height: calc(100vh - 420px);
-  min-height: 380px;
+  height: calc(100vh - 400px);
+  min-height: 480px;
   overflow-y: auto;
-  padding: 8px 6px;
+  padding: 12px 10px;
   margin-bottom: 12px;
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 10px;
@@ -627,7 +687,7 @@ async function doSave(pid: number) {
 }
 
 .chat-bubble {
-  max-width: 86%;
+  max-width: 88%;
   padding: 10px 14px;
   border-radius: 12px;
   font-size: 14px;
@@ -680,6 +740,43 @@ async function doSave(pid: number) {
   margin-bottom: 0;
 }
 
+/* 内嵌的优化日志卡片 */
+.log-result-card {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--border-color, #e4e7ed);
+  border-radius: 10px;
+  background: var(--el-bg-color, #fff);
+}
+
+.result-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
+.result-preview {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  padding: 6px 14px;
+  min-height: 160px;
+  max-height: 420px;
+  overflow: auto;
+  background: var(--el-bg-color, #fff);
+}
+
+.result-textarea :deep(.el-textarea__inner) {
+  line-height: 1.7;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 13px;
+}
+
+.group-note {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-secondary, #909399);
+}
+
 /* 质量检查问答面板 */
 .qa-panel {
   margin-top: 8px;
@@ -707,48 +804,56 @@ async function doSave(pid: number) {
 
 .qa-options {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
 }
 
-.chat-input-row {
+/* 输入区（参考 AI 助手） */
+.chat-input-area {
   display: flex;
-  gap: 8px;
+  align-items: flex-end;
+  gap: 10px;
 }
 
-/* 结果预览 */
-.result-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 10px;
+.chat-input-area .el-input {
+  flex: 1;
 }
 
-.result-preview {
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 6px;
-  padding: 6px 14px;
-  min-height: 240px;
-  max-height: 460px;
-  overflow: auto;
+.chat-input-area :deep(.el-textarea__inner) {
+  border-radius: 10px;
+  padding: 9px 12px;
+  line-height: 1.6;
 }
 
-.result-textarea :deep(.el-textarea__inner) {
-  line-height: 1.7;
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  font-size: 13px;
+.send-btn {
+  height: 38px;
+  border-radius: 10px;
+  padding: 0 20px;
 }
 
-.group-note {
-  margin-top: 10px;
-  font-size: 12px;
-  color: var(--text-secondary, #909399);
+/* 我的日志抽屉 */
+.recent-log-title {
+  font-size: 14px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+}
+
+.drawer-footer {
+  margin-top: 14px;
+  text-align: center;
 }
 
 @media (max-width: 768px) {
   .chat-body {
     height: auto;
-    min-height: 300px;
+    min-height: 320px;
     max-height: 60vh;
+  }
+
+  .todo-list {
+    max-height: 300px;
   }
 }
 </style>
