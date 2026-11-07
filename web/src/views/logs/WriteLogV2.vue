@@ -338,6 +338,16 @@ const draftInput = ref('');
 const inputFocused = ref(false);
 const pendingQuestions = ref<any[]>([]);
 const qaAnswers = ref<Record<number, { choice: string; other: string }>>({});
+
+// 过滤 AI 自带的"其他/自行填写"类兜底选项，避免与前端固定的自由填写入口重复
+function filterOtherOptions(questions: any[] | undefined): any[] {
+  return (questions || []).map((q) => ({
+    ...q,
+    options: (q.options || []).filter(
+      (o: string) => !/其他|自行填写|自己填|以上都|自由输入/.test(o)
+    ),
+  }));
+}
 const assisting = ref(false);
 const saving = ref(false);
 const chatBodyEl = ref<HTMLElement | null>(null);
@@ -492,7 +502,7 @@ async function runAssist() {
         content: `质量检查通过${data.score != null ? `（${data.score}分）` : ''}，日志已优化生成。`,
       });
     } else if (data) {
-      pendingQuestions.value = data.questions || [];
+      pendingQuestions.value = filterOtherOptions(data.questions);
       qaAnswers.value = {};
       pendingQuestions.value.forEach((_q, i) => {
         qaAnswers.value[i] = { choice: '', other: '' };
