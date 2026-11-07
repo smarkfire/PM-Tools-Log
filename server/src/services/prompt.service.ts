@@ -7,7 +7,7 @@
  */
 import { queryOne } from '../config/db';
 
-export type PromptType = 'log_optimize' | 'report' | 'chat';
+export type PromptType = 'log_optimize' | 'log_review' | 'report' | 'chat';
 
 /**
  * 获取生效的提示词

@@ -11,7 +11,7 @@ import { Request, Response } from 'express';
 import { queryMany, queryOne } from '../config/db';
 import { success, fail } from '../utils/response';
 import { getDataScope } from '../services/permission.service';
-import { chat, AiProvider } from '../services/ai.service';
+import { chat, AiProvider, ChatMessage } from '../services/ai.service';
 import { getUserAiConfig } from '../services/config.service';
 import { getEffectivePrompt } from '../services/prompt.service';
 
@@ -376,6 +376,133 @@ export async function optimizeLog(req: Request, res: Response) {
     { override: aiProvider === 'qwen' ? userAiConfig.qwen : userAiConfig.deepseek }
   );
   res.json(success({ optimizedContent: result, provider: aiProvider }, '优化完成'));
+}
+
+/**
+ * 新版填报：对话式生成 + 质量检查 + 优化（多轮澄清）
+ * POST /api/logs/assist
+ * body: { date, projectId, todos, draft, history, provider }
+ * 返回: { action: 'ask' | 'done', questions, result }
+ */
+export async function assistLog(req: Request, res: Response) {
+  const userId = req.authUser!.id;
+  const { date, projectId, todos, draft, history, provider } = req.body || {};
+  const aiProvider: AiProvider = provider === 'deepseek' ? 'deepseek' : 'qwen';
+
+  const me = await queryOne<{ display_name: string }>(
+    'SELECT display_name FROM users WHERE id = $1',
+    [userId]
+  );
+  const displayName = me?.display_name || '我';
+
+  let projectName = '';
+  let groupNames: string[] = [];
+  if (projectId) {
+    const p = await queryOne<{ name: string }>('SELECT name FROM projects WHERE id = $1', [projectId]);
+    projectName = p?.name || '';
+    const gs = await queryMany<{ name: string }>(
+      'SELECT name FROM project_groups WHERE project_id = $1 ORDER BY id',
+      [projectId]
+    );
+    groupNames = gs.map((g) => g.name);
+  }
+
+  // 近 7 天历史日志（优化稿优先），供 AI 参考措辞与延续性
+  const recentLogs = await queryMany<{
+    log_date: string;
+    optimized_content: string | null;
+    content: string;
+  }>(
+    `SELECT log_date, optimized_content, content FROM work_logs
+     WHERE user_id = $1 ORDER BY log_date DESC LIMIT 7`,
+    [userId]
+  );
+  const recentText = recentLogs.length
+    ? recentLogs
+        .map((l) => `- ${l.log_date}：${(l.optimized_content || l.content || '').slice(0, 500)}`)
+        .join('\n')
+    : '（暂无历史日志）';
+
+  const todoText =
+    (Array.isArray(todos) ? todos : [])
+      .map(
+        (t: any, i: number) =>
+          `${i + 1}. ${t?.status === 'done' ? '[已完成]' : '[未完成]'} ${String(t?.content || '').trim()}`
+      )
+      .join('\n') || '（无待办，请根据用户补充生成）';
+
+  const context = [
+    `【用户信息】姓名：${displayName}；日志日期：${date || '今天'}`,
+    `【项目】${projectName || '未选择'}${groupNames.length ? `，可选小组：${groupNames.join('、')}` : ''}`,
+    `【今日待办】\n${todoText}`,
+    draft ? `【用户补充】${draft}` : '',
+    `【历史日志参考】\n${recentText}`,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  const systemPrompt = await getEffectivePrompt(userId, 'log_review');
+  if (!systemPrompt) {
+    res.status(500).json(fail('系统提示词未配置，请联系管理员初始化'));
+    return;
+  }
+
+  const historyMsgs = (Array.isArray(history) ? history : [])
+    .filter((h: any) => h && (h.content || h.role === 'assistant'))
+    .map(
+      (h: any) =>
+        ({
+          role: h.role === 'assistant' ? 'assistant' : 'user',
+          content: String(h.content || ''),
+        }) as ChatMessage
+    );
+
+  const messages: ChatMessage[] = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: context },
+    ...historyMsgs,
+  ];
+
+  const userAiConfig = await getUserAiConfig(userId);
+  const raw = await chat(aiProvider, messages, {
+    temperature: 0.3,
+    override: aiProvider === 'qwen' ? userAiConfig.qwen : userAiConfig.deepseek,
+  });
+
+  res.json(success(parseAssistResult(raw)));
+}
+
+/** 解析 AI 返回的 JSON（容错：剥离围栏 / 多余文字） */
+function parseAssistResult(raw: string): {
+  action: 'ask' | 'done';
+  questions: { field: string; question: string; options: string[] }[];
+  result: { content: string; hours: number | null; groups: { name: string; hours: number | null }[] } | null;
+} {
+  let text = raw.trim();
+  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) text = fence[1].trim();
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start >= 0 && end > start) text = text.slice(start, end + 1);
+  try {
+    const obj = JSON.parse(text);
+    const questions = Array.isArray(obj.questions) ? obj.questions : [];
+    const result = obj.action === 'done' && obj.result ? obj.result : null;
+    return {
+      action: obj.action === 'done' ? 'done' : 'ask',
+      questions,
+      result: result
+        ? {
+            content: String(result.content || ''),
+            hours: typeof result.hours === 'number' ? result.hours : null,
+            groups: Array.isArray(result.groups) ? result.groups : [],
+          }
+        : null,
+    };
+  } catch {
+    // 解析失败：降级为最终结果，把原文当日志内容
+    return { action: 'done', questions: [], result: { content: raw, hours: null, groups: [] } };
+  }
 }
 
 /**

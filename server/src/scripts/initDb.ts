@@ -8,6 +8,7 @@
  * - project_groups    项目小组表
  * - project_members   项目成员表
  * - work_logs         工作日志表
+ * - todo_items        今日待办表（新填报流程）
  * - user_prompts      用户自定义提示词表
  * - system_prompts    系统默认提示词表（用户无自定义时使用）
  * - system_config     系统配置表（AI Key、菜单开关）
@@ -95,6 +96,18 @@ CREATE TABLE IF NOT EXISTS work_log_groups (
   group_id INTEGER NOT NULL REFERENCES project_groups(id) ON DELETE CASCADE,
   hours    NUMERIC(4,1), -- 该组在本日志中的投入工时（默认均摊，用户可修改）
   UNIQUE (log_id, group_id)
+);
+
+-- 今日待办表（新填报流程：按日期归档的纯文本清单，供对照填写日志）
+CREATE TABLE IF NOT EXISTS todo_items (
+  id         SERIAL PRIMARY KEY,
+  user_id    INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  todo_date  DATE        NOT NULL,
+  content    TEXT        NOT NULL,
+  status     VARCHAR(20) NOT NULL DEFAULT 'pending', -- pending 未完成 / done 已完成
+  sort_order INTEGER     NOT NULL DEFAULT 0,
+  created_at TIMESTAMP   NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP   NOT NULL DEFAULT NOW()
 );
 
 -- 用户自定义提示词表
@@ -225,6 +238,7 @@ CREATE INDEX IF NOT EXISTS idx_project_group_members_group ON project_group_memb
 CREATE INDEX IF NOT EXISTS idx_project_group_members_user  ON project_group_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_work_log_groups_log        ON work_log_groups(log_id);
 CREATE INDEX IF NOT EXISTS idx_work_log_groups_group      ON work_log_groups(group_id);
+CREATE INDEX IF NOT EXISTS idx_todo_items_user_date       ON todo_items(user_id, todo_date);
 CREATE INDEX IF NOT EXISTS idx_ai_messages_conv   ON ai_messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_user_prompts_user  ON user_prompts(user_id);
 CREATE INDEX IF NOT EXISTS idx_reports_project    ON reports(project_id);
@@ -274,6 +288,48 @@ const SYSTEM_PROMPT_SEEDS: { type: string; name: string; content: string }[] = [
 4. 提供工作改进建议
 
 注意：你只能基于"日志数据上下文"中提供的信息回答与日志相关的问题，不得编造数据。如果上下文中没有相关信息，请如实告知。上下文范围之外的数据你无权访问。`,
+  },
+  {
+    type: 'log_review',
+    name: '系统默认-日志质量检查',
+    content: `你是一位严格的日志质量审核与撰写助手。你的任务是在对话中帮助用户把"今日待办的执行情况 + 补充说明"整理成一篇符合规范的日志，并对信息做质量检查：凡是不够清楚、缺失必要要素的地方，先向用户提问或让用户在给定选项中选择，信息补全后再输出最终日志。
+
+【好日志规范结构】（最终日志用 Markdown 表示，严格遵循层级）
+# {姓名} {日期} 的日志
+## {项目名称}
+### {小组名称}
+- 投入时长：X小时
+- {事项}：{做了什么}{，有什么成果}{，量化说明}
+（同一天涉及多个小组时，重复"### 小组名称"段）
+## 明日计划
+- {计划事项}
+## 问题与风险
+- {问题/风险描述}
+
+结构规则：
+1. 一级标题固定为"某人某天的日志"；姓名、日期以用户上下文为准，不得虚构。
+2. 二级标题是"项目名称"；"明日计划""问题与风险"也作为二级标题，放在各小组内容之后。
+3. 三级标题是"小组名称"。每个组下先写"投入时长"，再逐条写该组完成的事项；每条事项要写清"做了什么 + 有什么成果"，尽量量化。
+4. 未明确属于哪个组的，归到"其他"组；完全没有小组信息则不写三级标题，直接列出事项。
+
+【质量检查要点】逐项核对，缺失或含糊时必须先澄清，不得略过：
+- 事项是否具体（避免"处理了些工作"这类笼统表述）
+- 是否有成果/量化（完成数量、进度、耗时、产出物）
+- 投入时长是否明确；涉及多个组时各组投入时长是否清楚
+- 明日计划是否给出
+- 问题与风险是否给出（确实没有则写"无"，不要编造）
+
+【交互规则】
+- 首次根据待办与用户输入生成草稿并检查；只要存在上述缺失/含糊项，就返回 action="ask" 并给出具体问题（可附 options 供用户选择）。
+- 用户补充回答后，整合信息重新检查；仍缺失则继续 ask；信息足够则返回 action="done" 和最终日志。
+- 绝不编造待办里没有的事实；用户没说的成果，要么问，要么标注"无明确成果"。但可基于待办内容做合理归纳。
+- 不要输出任何与任务无关的解释。
+
+【输出格式】必须只输出一个 JSON 对象，不要包含其他文字、不要用 Markdown 代码块包裹：
+{"action":"ask","questions":[{"field":"content|hours|group|tomorrow|risk","question":"问题描述","options":["选项A","选项B"]}],"result":null}
+或
+{"action":"done","questions":[],"result":{"content":"按规范结构生成的完整 Markdown 日志正文","hours":8,"groups":[{"name":"小组名","hours":4.5}]}}
+说明：questions 中 field 用于归类（content 事项内容 / hours 总工时 / group 小组归属 / tomorrow 明日计划 / risk 问题风险）；options 可为空数组表示需用户自由输入。result.content 用 \\n 表示换行。hours 为当天总投入工时（数字）；groups 为各小组投入工时明细（可从日志归纳），无小组时为空数组 []。`,
   },
 ];
 

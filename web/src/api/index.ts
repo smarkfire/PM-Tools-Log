@@ -87,8 +87,53 @@ export const logApi = {
   remove: (id: number) => request.delete(`/logs/${id}`),
   optimize: (data: { content: string; provider: string; promptId?: number }) =>
     request.post<{ optimizedContent: string; provider: string }>('/logs/optimize', data),
+  /** 新版填报：对话式生成 + 质量检查 + 优化（多轮澄清） */
+  assist: (data: {
+    date: string;
+    projectId?: number | null;
+    todos?: { content: string; status: string }[];
+    draft?: string;
+    history?: { role: 'user' | 'assistant'; content: string }[];
+    provider?: string;
+  }) => request.post<AssistResult>('/logs/assist', data),
   stats: (params?: { projectId?: number; startDate?: string; endDate?: string }) =>
     request.get<LogStats>('/logs/stats', { params }),
+};
+
+/** 新版填报 AI 质量检查结果 */
+export interface AssistQuestion {
+  field: string;
+  question: string;
+  options: string[];
+}
+export interface AssistResult {
+  action: 'ask' | 'done';
+  questions: AssistQuestion[];
+  result: {
+    content: string;
+    hours: number | null;
+    groups: { name: string; hours: number | null }[];
+  } | null;
+}
+
+// ==================== 今日待办（新填报流程） ====================
+export interface TodoItem {
+  id: number;
+  content: string;
+  status: 'pending' | 'done';
+  sort_order: number;
+}
+export interface TodoDaySummary {
+  todo_date: string;
+  total: number;
+  done: number;
+}
+
+export const todoApi = {
+  list: (date: string) => request.get<TodoItem[]>('/todos', { params: { date } }),
+  save: (data: { date: string; items: { content: string; status: string }[] }) =>
+    request.put<TodoItem[]>('/todos', data),
+  history: (days?: number) => request.get<TodoDaySummary[]>('/todos/history', { params: { days } }),
 };
 
 // ==================== 报告 ====================

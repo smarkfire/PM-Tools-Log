@@ -11,6 +11,7 @@ import * as logController from '../controllers/log.controller';
 import * as reportController from '../controllers/report.controller';
 import * as promptController from '../controllers/prompt.controller';
 import * as chatController from '../controllers/chat.controller';
+import * as todoController from '../controllers/todo.controller';
 
 const router = Router();
 const wrap = asyncHandler;
@@ -44,6 +45,12 @@ router.get('/logs/:id', authMiddleware, wrap(logController.getLog));
 router.post('/logs', authMiddleware, wrap(logController.saveLog));
 router.delete('/logs/:id', authMiddleware, wrap(logController.deleteLog));
 router.post('/logs/optimize', authMiddleware, wrap(logController.optimizeLog));
+router.post('/logs/assist', authMiddleware, wrap(logController.assistLog));
+
+// ==================== 今日待办（新填报流程） ====================
+router.get('/todos/history', authMiddleware, wrap(todoController.listTodoHistory));
+router.get('/todos', authMiddleware, wrap(todoController.listTodos));
+router.put('/todos', authMiddleware, wrap(todoController.saveTodos));
 
 // ==================== 报告 ====================
 router.post('/reports/generate', authMiddleware, wrap(reportController.generateReport));

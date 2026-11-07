@@ -47,6 +47,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '填写日志' },
       },
       {
+        path: 'logs/write-v2',
+        name: 'WriteLogV2',
+        component: () => import('../views/logs/WriteLogV2.vue'),
+        meta: { title: '填写日志·新版' },
+      },
+      {
+        path: 'todos',
+        name: 'TodoHistory',
+        component: () => import('../views/logs/TodoHistory.vue'),
+        meta: { title: '历史待办' },
+      },
+      {
         path: 'projects',
         name: 'Projects',
         component: () => import('../views/projects/ProjectList.vue'),
