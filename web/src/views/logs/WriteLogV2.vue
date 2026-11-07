@@ -51,9 +51,6 @@
             </div>
           </el-popover>
         </div>
-        <div class="page-desc">
-          左侧维护今日待办，中间与 AI 对话生成日志（自动质量检查、追问补全），在对话里确认优化稿并保存
-        </div>
       </div>
       <div class="header-tools">
         <el-date-picker
@@ -80,7 +77,7 @@
       style="margin-bottom: 16px"
     />
 
-    <el-row :gutter="16">
+    <el-row :gutter="16" class="fill-row">
       <!-- 左：待办（干净清单，实时保存） -->
       <el-col :xs="24" :md="7">
         <el-card shadow="never" class="block-card">
@@ -217,7 +214,7 @@
               <el-input
                 v-model="draftInput"
                 type="textarea"
-                :autosize="{ minRows: 5, maxRows: 12 }"
+                :autosize="{ minRows: 4, maxRows: 10 }"
                 placeholder="补充说明：今天具体做了什么、有什么成果…也可以直接向 AI 提问"
                 @focus="inputFocused = true"
                 @blur="inputFocused = false"
@@ -613,12 +610,41 @@ async function doSave(pid: number) {
 </script>
 
 <style scoped>
-.page-header {
+/* 整页锁定视口：页面不滚动，滚动收进控件内部 */
+.page-container {
+  height: calc(100vh - 56px);
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.page-header {
+  flex-shrink: 0;
+}
+
+/* 行内两列拉满剩余高度 */
+.fill-row {
+  flex: 1;
+  min-height: 0;
+}
+
+.fill-row > .el-col {
+  height: 100%;
+}
+
+.block-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.block-card :deep(.el-card__body) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .header-tools {
@@ -740,28 +766,28 @@ async function doSave(pid: number) {
   font-weight: 600;
 }
 
-.block-card {
-  margin-bottom: 16px;
-}
-
 .card-head-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 /* 待办 */
 .todo-input-row {
+  flex-shrink: 0;
   display: flex;
   gap: 8px;
   margin-bottom: 12px;
 }
 
 .todo-list {
-  max-height: calc(100vh - 380px);
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 .todo-item {
@@ -796,28 +822,17 @@ async function doSave(pid: number) {
   margin-left: 0;
 }
 
-/* 对话区（AI 助手风格） */
-.chat-card {
-  display: flex;
-  flex-direction: column;
-}
-
-.chat-card :deep(.el-card__body) {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-}
-
+/* 对话区（AI 助手风格）：卡片 body 内 flex 自适应 */
 .chat-body {
   flex: 1;
-  height: calc(100vh - 540px);
-  min-height: 420px;
+  min-height: 0;
   overflow-y: auto;
   padding: 12px 10px;
   margin-bottom: 12px;
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 10px;
   background: var(--el-fill-color-blank, #fff);
+  scrollbar-width: thin;
 }
 
 .chat-msg {
@@ -1000,6 +1015,7 @@ async function doSave(pid: number) {
 
 /* 输入区（卡片式，聚焦高亮） */
 .chat-input-area {
+  flex-shrink: 0;
   margin-top: 4px;
 }
 
@@ -1069,8 +1085,25 @@ async function doSave(pid: number) {
 }
 
 @media (max-width: 768px) {
-  .chat-body {
+  /* 移动端放开页面滚动，控件保持内部滚动 */
+  .page-container {
     height: auto;
+    overflow: visible;
+  }
+
+  .fill-row > .el-col {
+    height: auto;
+  }
+
+  .block-card {
+    height: auto;
+  }
+
+  .block-card :deep(.el-card__body) {
+    overflow: visible;
+  }
+
+  .chat-body {
     min-height: 320px;
     max-height: 60vh;
   }
