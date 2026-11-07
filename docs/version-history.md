@@ -202,6 +202,6 @@ git checkout v1.1.0   # 或拉取 main 分支最新代码
 
 ### 二、数据库变更
 
-- 新增 `todo_items` 待办表（user_id / todo_date / content / status / sort_order，按 用户+日期+内容 唯一），由部署时幂等迁移自动创建，**不影响任何已有数据，历史日志完整保留**
+- 新增 `todo_items` 待办表（user_id / todo_date / content / status / sort_order，按日整份替换保存），由部署时幂等迁移自动创建，**不影响任何已有数据，历史日志完整保留**
 - 新增 `log_review` 系统提示词种子（好日志规范 + 质量检查规则），首次部署自动写入
 - 从 v1.2.x 升级：部署代码即可，无需手动执行 SQL
