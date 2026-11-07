@@ -13,6 +13,7 @@ const DEFAULT_MENUS: MenuVisibility = {
   logsWrite: true,
   logs: true,
   logsAll: true,
+  logsMyV2: true,
   projects: true,
   reports: true,
   chat: true,

@@ -104,7 +104,11 @@ export async function listLogs(req: Request, res: Response) {
     }
   }
 
-  const { projectId, userId, startDate, endDate, keyword, page, pageSize } = req.query;
+  const { projectId, userId, startDate, endDate, keyword, page, pageSize, source } = req.query;
+  if (source) {
+    params.push(String(source));
+    conditions.push(`wl.source = $${params.length}`);
+  }
   if (projectId) {
     params.push(parseInt(projectId as string, 10));
     conditions.push(`wl.project_id = $${params.length}`);
@@ -220,14 +224,16 @@ export async function getLog(req: Request, res: Response) {
  */
 export async function saveLog(req: Request, res: Response) {
   const userId = req.authUser!.id;
-  const { logDate, projectId, content, optimizedContent, aiProvider, hours, groups } =
+  const { logDate, projectId, content, optimizedContent, aiProvider, hours, groups, source, aiScore } =
     req.body || {};
   if (!logDate || !content?.trim()) {
     res.status(400).json(fail('日志日期和内容为必填项'));
     return;
   }
-  // 所属项目必填
-  if (!projectId) {
+  // 所属项目：旧版填报必填；新版（source=v2）一天一条日志，项目信息在日志内容中，允许为空
+  const isV2 = source === 'v2';
+  const scoreValue = typeof aiScore === 'number' && aiScore >= 0 && aiScore <= 100 ? Math.round(aiScore) : null;
+  if (!isV2 && !projectId) {
     res.status(400).json(fail('所属项目为必填项'));
     return;
   }
@@ -295,9 +301,18 @@ export async function saveLog(req: Request, res: Response) {
     }
     const updated = await queryOne(
       `UPDATE work_logs SET content = $1, optimized_content = $2, ai_provider = $3,
-         hours = $4, project_id = $5, updated_at = NOW()
-       WHERE id = $6 RETURNING *`,
-      [content, optimizedContent || null, aiProvider || null, hours || null, projectId || null, existing.id]
+         hours = $4, project_id = $5, source = $6, ai_score = $7, updated_at = NOW()
+       WHERE id = $8 RETURNING *`,
+      [
+        content,
+        optimizedContent || null,
+        aiProvider || null,
+        hours || null,
+        projectId || null,
+        isV2 ? 'v2' : 'v1',
+        scoreValue,
+        existing.id,
+      ]
     );
     if (groupsProvided) {
       await syncLogGroups(existing.id, groups, hours ?? null);
@@ -306,9 +321,19 @@ export async function saveLog(req: Request, res: Response) {
     return;
   }
   const created = await queryOne(
-    `INSERT INTO work_logs (user_id, project_id, log_date, content, optimized_content, ai_provider, hours)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-    [userId, projectId || null, logDate, content, optimizedContent || null, aiProvider || null, hours || null]
+    `INSERT INTO work_logs (user_id, project_id, log_date, content, optimized_content, ai_provider, hours, source, ai_score)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+    [
+      userId,
+      projectId || null,
+      logDate,
+      content,
+      optimizedContent || null,
+      aiProvider || null,
+      hours || null,
+      isV2 ? 'v2' : 'v1',
+      scoreValue,
+    ]
   );
   if (groupsProvided) {
     await syncLogGroups(created!.id, groups, hours ?? null);
@@ -386,7 +411,7 @@ export async function optimizeLog(req: Request, res: Response) {
  */
 export async function assistLog(req: Request, res: Response) {
   const userId = req.authUser!.id;
-  const { date, projectId, todos, draft, history, provider } = req.body || {};
+  const { date, todos, draft, history, provider } = req.body || {};
   const aiProvider: AiProvider = provider === 'deepseek' ? 'deepseek' : 'qwen';
 
   const me = await queryOne<{ display_name: string }>(
@@ -395,17 +420,18 @@ export async function assistLog(req: Request, res: Response) {
   );
   const displayName = me?.display_name || '我';
 
-  let projectName = '';
-  let groupNames: string[] = [];
-  if (projectId) {
-    const p = await queryOne<{ name: string }>('SELECT name FROM projects WHERE id = $1', [projectId]);
-    projectName = p?.name || '';
-    const gs = await queryMany<{ name: string }>(
-      'SELECT name FROM project_groups WHERE project_id = $1 ORDER BY id',
-      [projectId]
-    );
-    groupNames = gs.map((g) => g.name);
-  }
+  // 用户参与的全部项目及各项目小组（供 AI 核对名称，保证与项目管理数据一致）
+  const myProjects = await queryMany<{ name: string; groups: string | null }>(
+    `SELECT p.name,
+       (SELECT string_agg(pg.name, '、' ORDER BY pg.id) FROM project_groups pg WHERE pg.project_id = p.id) AS groups
+     FROM projects p
+     JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = $1
+     ORDER BY p.id`,
+    [userId]
+  );
+  const projectText = myProjects.length
+    ? myProjects.map((p) => `- ${p.name}${p.groups ? `（小组：${p.groups}）` : '（未分组）'}`).join('\n')
+    : '（未参与任何项目）';
 
   // 近 7 天历史日志（优化稿优先），供 AI 参考措辞与延续性
   const recentLogs = await queryMany<{
@@ -433,7 +459,7 @@ export async function assistLog(req: Request, res: Response) {
 
   const context = [
     `【用户信息】姓名：${displayName}；日志日期：${date || '今天'}`,
-    `【项目】${projectName || '未指定（请从待办与补充说明中识别项目，识别不出时向用户询问）'}${groupNames.length ? `，该项目可选小组：${groupNames.join('、')}` : ''}`,
+    `【参与的项目与小组】（日志中出现的项目名、小组名必须与此清单完全一致，不得使用别名、简写或自行创造）\n${projectText}`,
     `【今日待办】\n${todoText}`,
     draft ? `【用户补充】${draft}` : '',
     `【历史日志参考】\n${recentText}`,

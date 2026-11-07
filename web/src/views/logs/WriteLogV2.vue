@@ -162,6 +162,9 @@
                     :rows="12"
                     class="result-textarea"
                   />
+                  <div v-if="m.logResult.projects && m.logResult.projects.length" class="group-note">
+                    识别项目：{{ m.logResult.projects.join('、') }}
+                  </div>
                   <div v-if="m.logResult.groups && m.logResult.groups.length" class="group-note">
                     识别小组：{{ m.logResult.groups.map((g) => g.name).join('、') }}
                   </div>
@@ -265,22 +268,6 @@
         </el-button>
       </div>
     </el-drawer>
-
-    <!-- 项目归属确认（AI 未识别出项目时的兜底） -->
-    <el-dialog v-model="saveDialogVisible" title="选择日志所属项目" width="400px">
-      <p style="margin-top: 0">
-        一天一条日志，归属一个项目。AI 未能从内容中识别出项目，请手动选择：
-      </p>
-      <el-select v-model="dialogProjectId" placeholder="请选择项目" style="width: 100%">
-        <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
-      </el-select>
-      <template #footer>
-        <el-button @click="saveDialogVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="!dialogProjectId" :loading="saving" @click="doSave(dialogProjectId!)">
-          确认保存
-        </el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
@@ -288,14 +275,13 @@
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { chatApi, logApi, projectApi, todoApi, type TodoItem } from '../../api';
+import { chatApi, logApi, todoApi, type TodoItem } from '../../api';
 import { currentWeekMonday } from '../../utils/date';
 import MdPreview from '../../components/MdPreview.vue';
-import type { Project, WorkLog } from '../../types';
+import type { WorkLog } from '../../types';
 
 const router = useRouter();
 
-const projects = ref<Project[]>([]);
 const todos = ref<TodoItem[]>([]);
 const newTodoText = ref('');
 
@@ -319,9 +305,10 @@ const aiUnavailable = computed(() => !providers.qwenConfigured && !providers.dee
 
 // 对话与质量检查
 interface AssistResult {
-  project?: string;
+  projects?: string[];
   content: string;
   hours: number | null;
+  score?: number | null;
   groups: { name: string; hours: number | null }[];
 }
 interface ChatMsg {
@@ -359,21 +346,11 @@ const result = ref<AssistResult | null>(null);
 const logsDrawerVisible = ref(false);
 const recentLogs = ref<WorkLog[]>([]);
 
-// 保存时的项目兜底弹窗
-const saveDialogVisible = ref(false);
-const dialogProjectId = ref<number | undefined>(undefined);
-
-const projectGroups = computed(
-  () => projects.value.find((p) => p.id === (dialogProjectId.value || 0))?.groups || []
-);
-
 onMounted(async () => {
-  const [projectRes, providerRes, todoRes] = await Promise.all([
-    projectApi.list(),
+  const [providerRes, todoRes] = await Promise.all([
     chatApi.providers().catch(() => null),
     todoApi.list(logDate.value).catch(() => null),
   ]);
-  projects.value = projectRes.data || [];
   if (providerRes) {
     providers.qwenConfigured = providerRes.data.qwenConfigured;
     providers.deepseekConfigured = providerRes.data.deepseekConfigured;
@@ -462,7 +439,6 @@ async function runAssist() {
     await logApi.assistStream(
       {
         date: logDate.value,
-        projectId: null,
         todos: todos.value.map((t) => ({ content: t.content, status: t.status })),
         history: history.value,
         provider: provider.value,
@@ -490,7 +466,7 @@ async function runAssist() {
 
     const data = finalData;
     if (data && data.action === 'done' && data.result) {
-      result.value = data.result;
+      result.value = { ...data.result, score: data.score };
       pendingQuestions.value = [];
       msg.text =
         `✅ 质量检查通过${data.score != null ? `（${data.score} 分）` : ''}：${data.summary || '日志已按「好日志规范」优化生成'}\n\n` +
@@ -572,45 +548,29 @@ async function saveLog() {
     ElMessage.warning('请先生成日志');
     return;
   }
-  // 项目归属：优先用 AI 识别的项目名匹配用户项目列表；匹配不到弹窗兜底
-  const name = (result.value.project || '').trim();
-  const matched = name ? projects.value.find((p) => p.name === name) : null;
-  if (matched) {
-    await doSave(matched.id);
-  } else {
-    dialogProjectId.value = undefined;
-    saveDialogVisible.value = true;
-  }
+  await doSave();
 }
 
-async function doSave(pid: number) {
+async function doSave() {
   // 原始内容：保留待办执行情况作为原始依据
   const content =
     '今日待办执行情况：' +
     todos.value.map((t) => `${t.status === 'done' ? '[完成]' : '[未完成]'}${t.content}`).join('；');
 
-  // AI 识别的小组名 → 项目小组 id 映射（工时在项目级，由 AI 从内容推断，可空）
-  const groups = (result.value?.groups || [])
-    .map((g) => {
-      const grp = projectGroups.value.find((pg) => pg.name === g.name);
-      return grp ? { groupId: grp.id } : null;
-    })
-    .filter((x): x is { groupId: number } => !!x);
-
   saving.value = true;
   try {
     await logApi.save({
       logDate: logDate.value,
-      projectId: pid,
+      projectId: null,
       content,
       optimizedContent: result.value!.content,
       aiProvider: provider.value,
       hours: result.value!.hours ?? undefined,
-      groups,
+      source: 'v2',
+      aiScore: result.value!.score ?? undefined,
     });
-    saveDialogVisible.value = false;
     ElMessage.success('日志保存成功');
-    router.push('/logs');
+    router.push('/logs/v2');
   } catch (e: any) {
     ElMessage.error('保存失败：' + (e?.response?.data?.message || e?.message || '网络异常'));
   } finally {
@@ -629,6 +589,14 @@ async function doSave(pid: number) {
 }
 
 .page-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.header-left {
   flex-shrink: 0;
 }
 
@@ -658,9 +626,11 @@ async function doSave(pid: number) {
 }
 
 .header-tools {
+  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .tips-trigger {

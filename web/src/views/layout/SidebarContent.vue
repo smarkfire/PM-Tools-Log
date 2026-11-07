@@ -38,6 +38,11 @@
         <template #title>我的日志</template>
       </el-menu-item>
 
+      <el-menu-item v-if="menus.logsMyV2 !== false" index="/logs/v2">
+        <el-icon><Memo /></el-icon>
+        <template #title>我的日志·新版</template>
+      </el-menu-item>
+
       <el-menu-item index="/todos">
         <el-icon><List /></el-icon>
         <template #title>历史待办</template>

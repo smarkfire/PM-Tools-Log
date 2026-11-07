@@ -75,6 +75,8 @@ CREATE TABLE IF NOT EXISTS work_logs (
   optimized_content TEXT,
   ai_provider       VARCHAR(20),
   hours             NUMERIC(4,1),
+  source            VARCHAR(10) NOT NULL DEFAULT 'v1',  -- v1 旧版填报 / v2 对话式新版
+  ai_score          INTEGER,                             -- AI 质量检查得分（0~100，新版填报）
   created_at        TIMESTAMP   NOT NULL DEFAULT NOW(),
   updated_at        TIMESTAMP   NOT NULL DEFAULT NOW(),
   UNIQUE (user_id, log_date)
@@ -352,8 +354,8 @@ const SYSTEM_PROMPT_SEEDS: { type: string; name: string; content: string }[] = [
 第二部分：一个 JSON 对象（不要用 Markdown 代码块包裹）：
 {"action":"continue","score":65,"summary":"检查结论（当前得分与主要失分点，一两句话）","questions":[{"field":"content","question":"问题描述","options":["选项A","选项B"]}],"result":null}
 或（分数达到 80 及以上时）：
-{"action":"done","score":85,"summary":"检查结论一句话","questions":[],"result":{"project":"识别出的项目名称","content":"按规范结构生成的完整 Markdown 日志正文","hours":8,"groups":[{"name":"小组名"}]}}
-说明：score 为 0~100 的整数。result.content 用 \\n 表示换行；result.project 识别不出则为空字符串 ""；hours 为当天在该项目的总投入工时（数字）；groups 为日志中涉及的小组名称列表（不含工时），无小组时为空数组 []。`,
+{"action":"done","score":85,"summary":"检查结论一句话","questions":[],"result":{"projects":["识别出的项目名称"],"content":"按规范结构生成的完整 Markdown 日志正文","hours":8,"groups":[{"name":"小组名"}]}}
+说明：score 为 0~100 的整数，保存进日志作为质检得分。result.content 用 \\n 表示换行；result.projects 为日志中出现的全部项目名称列表（可能与【参与的项目与小组】清单逐一核对，完全一致，不使用别名简写；无项目信息时为空数组）；hours 为当天在各项目的总投入工时（数字）；groups 为日志中涉及的小组名称列表（同样与清单核对，无小组时为空数组）。`,
   },
 ];
 
@@ -686,6 +688,11 @@ async function initDb() {
      WHERE pm.group_id IS NOT NULL
      ON CONFLICT (project_id, user_id, group_id) DO NOTHING`
   );
+
+  // 旧库迁移：work_logs 增加 source（填报版本）与 ai_score（AI 质检得分）列
+  // （幂等，新库建表已含则跳过；历史日志 source 默认 v1，完整保留）
+  await query(`ALTER TABLE work_logs ADD COLUMN IF NOT EXISTS source VARCHAR(10) NOT NULL DEFAULT 'v1'`);
+  await query(`ALTER TABLE work_logs ADD COLUMN IF NOT EXISTS ai_score INTEGER`);
 
   const res = await query('SELECT COUNT(*)::int AS cnt FROM users');
   console.log(`当前用户数: ${res.rows[0].cnt}`);

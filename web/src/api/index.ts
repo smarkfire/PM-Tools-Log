@@ -68,6 +68,8 @@ export interface LogQuery {
   keyword?: string;
   page?: number;
   pageSize?: number;
+  /** 日志来源筛选：v1 旧版填报 / v2 新版对话式 */
+  source?: string;
 }
 
 export const logApi = {
@@ -83,6 +85,10 @@ export const logApi = {
     hours?: number;
     /** 涉及的小组标记（每组含投入工时，未填时后端按总工时均摊） */
     groups?: { groupId: number; hours?: number | null }[];
+    /** 日志来源：v1 旧版填报 / v2 新版对话式（项目写入内容，project_id 允许为空） */
+    source?: string;
+    /** AI 质检得分（0~100，新版填报保存进日志表） */
+    aiScore?: number;
   }) => request.post('/logs', data),
   remove: (id: number) => request.delete(`/logs/${id}`),
   optimize: (data: { content: string; provider: string; promptId?: number }) =>
@@ -90,7 +96,6 @@ export const logApi = {
   /** 新版填报：对话式生成 + 质量检查 + 优化（多轮澄清） */
   assist: (data: {
     date: string;
-    projectId?: number | null;
     todos?: { content: string; status: string }[];
     draft?: string;
     history?: { role: 'user' | 'assistant'; content: string }[];
@@ -103,7 +108,6 @@ export const logApi = {
   assistStream: async (
     data: {
       date: string;
-      projectId?: number | null;
       todos?: { content: string; status: string }[];
       history?: { role: 'user' | 'assistant'; content: string }[];
       provider?: string;
@@ -163,7 +167,8 @@ export interface AssistResult {
   summary?: string;
   questions: AssistQuestion[];
   result: {
-    project?: string;
+    /** 识别出的项目名称（多项目为数组，已与项目管理数据核对） */
+    projects?: string[];
     content: string;
     hours: number | null;
     groups: { name: string; hours: number | null }[];
@@ -375,6 +380,8 @@ export interface MenuVisibility {
   logsWrite: boolean;
   logs: boolean;
   logsAll: boolean;
+  /** 我的日志·新版（对话式填报产生的日志列表） */
+  logsMyV2?: boolean;
   projects: boolean;
   reports: boolean;
   chat: boolean;

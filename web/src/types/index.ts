@@ -80,6 +80,10 @@ export interface WorkLog {
   optimized_content: string | null;
   ai_provider: string | null;
   hours: number | null;
+  /** 日志来源：v1 旧版填报 / v2 新版对话式 */
+  source: string;
+  /** AI 质检得分（0~100，v2 日志保存时记录） */
+  ai_score: number | null;
   created_at: string;
   updated_at: string;
   user_name?: string;
