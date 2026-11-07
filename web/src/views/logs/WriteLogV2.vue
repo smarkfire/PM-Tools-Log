@@ -139,7 +139,7 @@
             </div>
 
             <div v-if="result.groups && result.groups.length" class="group-hours-note">
-              识别到的小组工时：{{ result.groups.map((g) => `${g.name} ${g.hours ?? 0}h`).join('、') }}
+              识别到的小组：{{ result.groups.map((g) => g.name).join('、') }}
             </div>
 
             <el-button
@@ -337,13 +337,13 @@ async function saveLog() {
     .join('；')];
   const content = rawParts.join('\n');
 
-  // AI 识别的小组名 → 项目小组 id 映射
+  // AI 识别的小组名 → 项目小组 id 映射（工时在项目级统一填写，组内不再分摊）
   const groups = (result.value.groups || [])
     .map((g) => {
       const grp = projectGroups.value.find((pg) => pg.name === g.name);
-      return grp ? { groupId: grp.id, hours: g.hours ?? null } : null;
+      return grp ? { groupId: grp.id } : null;
     })
-    .filter((x): x is { groupId: number; hours: number | null } => !!x);
+    .filter((x): x is { groupId: number } => !!x);
 
   saving.value = true;
   try {
