@@ -433,7 +433,7 @@ export async function assistLog(req: Request, res: Response) {
 
   const context = [
     `【用户信息】姓名：${displayName}；日志日期：${date || '今天'}`,
-    `【项目】${projectName || '未选择'}${groupNames.length ? `，可选小组：${groupNames.join('、')}` : ''}`,
+    `【项目】${projectName || '未指定（请从待办与补充说明中识别项目，识别不出时向用户询问）'}${groupNames.length ? `，该项目可选小组：${groupNames.join('、')}` : ''}`,
     `【今日待办】\n${todoText}`,
     draft ? `【用户补充】${draft}` : '',
     `【历史日志参考】\n${recentText}`,

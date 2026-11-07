@@ -308,7 +308,7 @@ const SYSTEM_PROMPT_SEEDS: { type: string; name: string; content: string }[] = [
 
 结构规则：
 1. 一级标题固定为"某人某天的日志"；姓名、日期以用户上下文为准，不得虚构。
-2. 二级标题是"项目名称"；项目名称下第一行写"投入时长：X小时"（当天在该项目的总投入工时）；"明日计划""问题与风险"也作为二级标题，放在各小组内容之后。
+2. 二级标题是"项目名称"；项目名称下第一行写"投入时长：X小时"（当天在该项目的总投入工时）；"明日计划""问题与风险"也作为二级标题，放在各小组内容之后。项目名称从待办与用户补充说明中识别；识别不出时先向用户询问属于哪个项目。
 3. 三级标题是"小组名称"。小组下面不再写投入时长，直接逐条写该组完成的事项。
 4. 每条事项必须写清楚"哪个功能模块"或"哪个交付物"，再说做了什么工作，格式：- {功能模块/交付物}：{做了什么}{，有什么成果}，尽量量化。
 5. 未明确属于哪个组的，归到"其他"组；完全没有小组信息则不写三级标题，直接列出事项。
@@ -329,8 +329,8 @@ const SYSTEM_PROMPT_SEEDS: { type: string; name: string; content: string }[] = [
 【输出格式】必须只输出一个 JSON 对象，不要包含其他文字、不要用 Markdown 代码块包裹：
 {"action":"ask","questions":[{"field":"content|hours|group|tomorrow|risk","question":"问题描述","options":["选项A","选项B"]}],"result":null}
 或
-{"action":"done","questions":[],"result":{"content":"按规范结构生成的完整 Markdown 日志正文","hours":8,"groups":[{"name":"小组名"}]}}
-说明：questions 中 field 用于归类（content 事项内容 / hours 总工时 / group 小组归属 / tomorrow 明日计划 / risk 问题风险）；options 可为空数组表示需用户自由输入。result.content 用 \\n 表示换行。hours 为当天在该项目的总投入工时（数字）；groups 为日志中涉及的小组名称列表（不含工时），无小组时为空数组 []。`,
+{"action":"done","questions":[],"result":{"project":"识别出的项目名称","content":"按规范结构生成的完整 Markdown 日志正文","hours":8,"groups":[{"name":"小组名"}]}}
+说明：questions 中 field 用于归类（content 事项内容 / hours 总工时 / group 小组归属 / tomorrow 明日计划 / risk 问题风险）；options 可为空数组表示需用户自由输入。result.content 用 \\n 表示换行。result.project 为从待办与补充说明中识别出的项目名称，识别不出则为空字符串 ""。hours 为当天在该项目的总投入工时（数字）；groups 为日志中涉及的小组名称列表（不含工时），无小组时为空数组 []。`,
   },
 ];
 
@@ -603,7 +603,21 @@ async function initDb() {
   console.log('所有表创建完成');
 
   // 种子数据（幂等插入，显式类型转换避免参数类型推导不一致）
+  // log_review 为新版填报的质检规范，随版本迭代：已存在则更新为最新内容（不覆盖用户自建提示词）
   for (const p of SYSTEM_PROMPT_SEEDS) {
+    if (p.type === 'log_review') {
+      await query(
+        `UPDATE system_prompts SET name = $2::varchar, content = $3::text WHERE type = 'log_review'`,
+        [p.type, p.name, p.content]
+      );
+      await query(
+        `INSERT INTO system_prompts (type, name, content)
+         SELECT $1::varchar, $2::varchar, $3::text
+         WHERE NOT EXISTS (SELECT 1 FROM system_prompts WHERE type = 'log_review')`,
+        [p.type, p.name, p.content]
+      );
+      continue;
+    }
     await query(
       `INSERT INTO system_prompts (type, name, content)
        SELECT $1::varchar, $2::varchar, $3::text
