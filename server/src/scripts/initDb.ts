@@ -607,8 +607,8 @@ async function initDb() {
   for (const p of SYSTEM_PROMPT_SEEDS) {
     if (p.type === 'log_review') {
       await query(
-        `UPDATE system_prompts SET name = $2::varchar, content = $3::text WHERE type = 'log_review'`,
-        [p.type, p.name, p.content]
+        `UPDATE system_prompts SET name = $1::varchar, content = $2::text WHERE type = 'log_review'`,
+        [p.name, p.content]
       );
       await query(
         `INSERT INTO system_prompts (type, name, content)
