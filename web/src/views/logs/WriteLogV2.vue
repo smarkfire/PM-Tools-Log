@@ -17,7 +17,7 @@
 ## {项目名称}
 - 投入时长：X小时
 ### {小组名称}
-- {功能模块/交付物}：做了什么，有什么成果
+- {做了什么，有什么成果}
 ## 明日计划
 - {后续工作安排}
 ## 问题与风险
@@ -26,10 +26,17 @@
                 <li><strong>一级标题</strong>：谁的哪天的日志</li>
                 <li><strong>二级标题</strong>：项目名称（下写当天总投入时长）、明日计划、问题与风险</li>
                 <li><strong>三级标题</strong>：小组名称，组下逐条写事项</li>
-                <li><strong>每条事项</strong>：写清哪个功能模块或哪个交付物做了什么工作、有什么成果，尽量量化</li>
+                <li><strong>每条事项</strong>：写清"做了什么、有什么成果"，对象融进句子（模块、页面、接口、文档、Bug 号），带进展状态，尽量量化</li>
               </ol>
+              <p class="tips-structure-title">事项怎么写算好？公式：进展 + 对象 + 动作 + 成果：</p>
+              <table class="tips-table">
+                <tr><th>差的表述</th><th>好的表述</th></tr>
+                <tr><td>处理了一些需求</td><td>完成用户管理页权限校验开发，提测通过</td></tr>
+                <tr><td>修 Bug</td><td>修复登录 token 过期闪退问题（BUG-128），已上线</td></tr>
+                <tr><td>继续做</td><td>智能体问答功能开发（进度 80%），剩余评测模块</td></tr>
+              </table>
               <p class="tips-score">
-                评分构成：事项具体性 30 分 / 成果量化 20 分 / 工时明确 20 分 / 明日计划 15 分 / 问题与风险 15 分
+                评分构成：事项具体性 30 分 / 成果量化 20 分 / 工时明确 20 分 / 明日计划 15 分 / 问题与风险 15 分；一条一件事，写结果不写过程
               </p>
             </div>
           </el-popover>
@@ -638,6 +645,27 @@ async function doSave(pid: number) {
   margin: 8px 0 0;
   font-size: 12px;
   color: var(--text-secondary, #909399);
+}
+
+.tips-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+
+.tips-table th,
+.tips-table td {
+  border: 1px solid var(--el-border-color-lighter);
+  padding: 4px 6px;
+  text-align: left;
+  word-break: break-all;
+}
+
+.tips-table th {
+  background: var(--el-fill-color-light);
+  color: var(--text-secondary, #909399);
+  font-weight: 600;
 }
 
 .tips-template {
