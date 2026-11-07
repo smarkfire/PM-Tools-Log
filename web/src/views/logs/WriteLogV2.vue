@@ -3,39 +3,27 @@
     <div class="page-header">
       <div class="page-title">填写日志 · 新版</div>
       <div class="page-desc">
-        对照今日待办，和 AI 对话生成符合规范的日志；信息缺失时 AI 会提问，补全后再优化输出
+        左侧维护今日待办，中间与 AI 对话生成今日日志（自动质量检查、追问补全），右侧确认优化稿并保存
       </div>
     </div>
 
     <el-row :gutter="16">
-      <!-- 左：今日待办 -->
+      <!-- 左：今日待办（干净清单，实时保存） -->
       <el-col :xs="24" :md="8">
         <el-card shadow="never" class="block-card">
-          <template #header><span class="card-title">今日待办</span></template>
-
-          <el-form label-position="top">
-            <el-form-item label="日志日期">
-              <el-date-picker
-                v-model="form.logDate"
-                type="date"
-                value-format="YYYY-MM-DD"
-                :disabled-date="disableOutOfRangeDate"
-                style="width: 100%"
-                @change="onDateChange"
-              />
-            </el-form-item>
-            <el-form-item label="所属项目" required>
-              <el-select v-model="form.projectId" placeholder="请选择项目（必填）" style="width: 100%">
-                <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="当天总工时（小时）">
-              <el-input-number v-model="form.hours" :min="0" :max="24" :step="0.5" style="width: 100%" />
-            </el-form-item>
-          </el-form>
+          <template #header>
+            <div class="card-head-row">
+              <span class="card-title">今日待办</span>
+              <el-tag size="small" type="info">实时保存</el-tag>
+            </div>
+          </template>
 
           <div class="todo-input-row">
-            <el-input v-model="newTodoText" placeholder="添加一条待办，回车确认" @keyup.enter="addTodo" />
+            <el-input
+              v-model="newTodoText"
+              placeholder="添加一条待办，回车确认"
+              @keyup.enter="addTodo"
+            />
             <el-button type="primary" size="small" @click="addTodo">添加</el-button>
           </div>
 
@@ -49,42 +37,92 @@
               <el-button link type="danger" size="small" @click="removeTodo(i)">删除</el-button>
             </div>
           </div>
-          <el-empty v-else description="暂无待办" :image-size="50" />
-
-          <div class="todo-actions">
-            <el-button :loading="savingTodo" @click="saveTodos">保存待办</el-button>
-            <el-button
-              type="primary"
-              :loading="assisting"
-              :disabled="!form.projectId"
-              @click="startGenerate"
-            >
-              <el-icon><MagicStick /></el-icon>根据待办生成日志
-            </el-button>
-          </div>
+          <el-empty v-else description="暂无待办，先添加今天的任务" :image-size="50" />
         </el-card>
       </el-col>
 
-      <!-- 中：对话与质量检查 -->
+      <!-- 中：今日日志（AI 对话 + 质量检查） -->
       <el-col :xs="24" :md="8">
         <el-card shadow="never" class="block-card chat-card">
           <template #header>
             <div class="card-head-row">
-              <span class="card-title">对话与质量检查</span>
-              <el-tag v-if="assisting" size="small" type="warning">AI 处理中</el-tag>
+              <span class="card-title">今日日志</span>
+              <el-select
+                v-model="projectId"
+                placeholder="选择项目（必填）"
+                size="small"
+                style="width: 150px"
+              >
+                <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
+              </el-select>
             </div>
           </template>
 
+          <!-- 常用操作 -->
+          <div class="quick-actions">
+            <el-button
+              type="primary"
+              size="small"
+              :loading="assisting"
+              :disabled="!projectId"
+              @click="startGenerate"
+            >
+              <el-icon><MagicStick /></el-icon>自动生成日志
+            </el-button>
+            <el-button size="small" @click="router.push('/logs')">
+              <el-icon><Document /></el-icon>我的日志
+            </el-button>
+            <el-button size="small" @click="router.push('/todos')">
+              <el-icon><List /></el-icon>历史待办
+            </el-button>
+          </div>
+
+          <!-- 填写要点（与旧版一致，记住展开状态） -->
+          <el-collapse v-model="tipsVisible" class="write-tips">
+            <el-collapse-item name="open">
+              <template #title>
+                <span class="write-tips-title">
+                  <el-icon><InfoFilled /></el-icon>
+                  填写要点：什么样的日志算好日志？
+                </span>
+              </template>
+              <div class="write-tips-body">
+                <p class="write-tips-slogan">
+                  标准：别人不看代码、不开会，也能知道你这天<strong>干了什么、干到什么程度、明天从哪继续</strong>。
+                </p>
+                <ol>
+                  <li><strong>做了什么</strong>：写清哪个功能模块或交付物做了什么工作，不写笼统词</li>
+                  <li><strong>进展结果</strong>：完成 / 进行中（百分比）/ 受阻，带可验证产出</li>
+                  <li><strong>工时投入</strong>：如实填写当天投入工时</li>
+                  <li><strong>问题与风险</strong>：卡点、需要的协助，早暴露早解决</li>
+                  <li><strong>明日计划</strong>：一两句话，让工作有连续性</li>
+                </ol>
+                <pre class="write-tips-template">【今日完成】登录模块联调完成，修复3个Bug
+【进行中】订单导出优化（80%）
+【问题】测试环境不稳定，等待运维处理
+【明日计划】导出功能自测并提测</pre>
+              </div>
+            </el-collapse-item>
+          </el-collapse>
+
+          <!-- 对话区 -->
           <div class="chat-body">
             <div v-for="(m, i) in messages" :key="i" class="chat-msg" :class="m.role">
-              <div class="chat-bubble">{{ m.text }}</div>
+              <div class="chat-bubble">
+                <MdPreview v-if="m.role === 'assistant'" :content="m.text" />
+                <template v-else>{{ m.text }}</template>
+              </div>
             </div>
 
-            <el-empty v-if="!messages.length" description="点击左侧「根据待办生成日志」开始对话" :image-size="60" />
+            <el-empty
+              v-if="!messages.length"
+              description="点击上方「自动生成日志」，AI 将根据待办执行情况帮你起草"
+              :image-size="60"
+            />
 
             <!-- 待回答的质量检查问题 -->
             <div v-if="pendingQuestions.length" class="qa-panel">
-              <div class="qa-title">请补充以下信息：</div>
+              <div class="qa-title">质量检查发现以下信息需要补充：</div>
               <div v-for="(q, qi) in pendingQuestions" :key="qi" class="qa-item">
                 <div class="qa-question">{{ q.question }}</div>
                 <el-radio-group v-if="q.options && q.options.length" v-model="qaAnswers[qi]" class="qa-options">
@@ -101,7 +139,7 @@
           <div class="chat-input-row">
             <el-input
               v-model="draftInput"
-              placeholder="补充说明（可选），如：今天主要是和测试联调接口"
+              placeholder="补充说明：今天具体做了什么、有什么成果…"
               @keyup.enter="sendDraft"
             />
             <el-button type="primary" size="small" @click="sendDraft">补充</el-button>
@@ -115,7 +153,7 @@
           <template #header>
             <div class="card-head-row">
               <span class="card-title">优化后的日志</span>
-              <el-tag v-if="result" size="small" type="success">已生成</el-tag>
+              <el-tag v-if="result" size="small" type="success">已优化</el-tag>
             </div>
           </template>
 
@@ -138,7 +176,7 @@
               <MdPreview :content="result.content" />
             </div>
 
-            <div v-if="result.groups && result.groups.length" class="group-hours-note">
+            <div v-if="result.groups && result.groups.length" class="group-note">
               识别到的小组：{{ result.groups.map((g) => g.name).join('、') }}
             </div>
 
@@ -153,7 +191,7 @@
               <el-icon><Check /></el-icon>确认保存日志
             </el-button>
           </div>
-          <el-empty v-else description="生成日志后在此预览" :image-size="80" />
+          <el-empty v-else description="质量检查通过并优化后，日志在此显示" :image-size="80" />
         </el-card>
       </el-col>
     </el-row>
@@ -161,37 +199,28 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { logApi, projectApi, todoApi, type TodoItem } from '../../api';
-import { useUserStore } from '../../stores/user';
-import { currentWeekMonday, formatDate } from '../../utils/date';
 import MdPreview from '../../components/MdPreview.vue';
 import type { Project } from '../../types';
 
 const router = useRouter();
-const userStore = useUserStore();
 
 const projects = ref<Project[]>([]);
 const todos = ref<TodoItem[]>([]);
 const newTodoText = ref('');
 
-const today = formatDate(new Date());
-const form = reactive({
-  logDate: today,
-  projectId: undefined as number | undefined,
-  hours: 8,
-});
+// 日志固定为今天；项目在中间栏选择
+const today = new Date();
+const logDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+const projectId = ref<number | undefined>(undefined);
 
-// 可填日期范围：本周一 ~ 本周日
-const weekMonday = currentWeekMonday();
-const mondayTime = new Date(weekMonday + 'T00:00:00').getTime();
-const sundayTime = mondayTime + 6 * 24 * 3600 * 1000;
-function disableOutOfRangeDate(d: Date): boolean {
-  const t = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  return t < mondayTime || t > sundayTime;
-}
+// 填写要点折叠面板（记住展开状态，与旧版共用 key）
+const TIPS_KEY = 'matelog_write_tips_open';
+const tipsVisible = ref<string[]>(localStorage.getItem(TIPS_KEY) === '1' ? ['open'] : []);
+watch(tipsVisible, (v) => localStorage.setItem(TIPS_KEY, v.includes('open') ? '1' : '0'));
 
 // 对话与质量检查
 const messages = ref<{ role: 'user' | 'assistant'; text: string }[]>([]);
@@ -201,11 +230,16 @@ const pendingQuestions = ref<any[]>([]);
 const qaAnswers = ref<Record<number, string>>({});
 const assisting = ref(false);
 const saving = ref(false);
-const savingTodo = ref(false);
 const resultView = ref<'edit' | 'preview'>('preview');
-const result = ref<{ content: string; hours: number | null; groups: { name: string; hours: number | null }[] } | null>(null);
+const result = ref<{
+  content: string;
+  hours: number | null;
+  groups: { name: string; hours: number | null }[];
+} | null>(null);
 
-const projectGroups = computed(() => projects.value.find((p) => p.id === form.projectId)?.groups || []);
+const projectGroups = computed(
+  () => projects.value.find((p) => p.id === projectId.value)?.groups || []
+);
 
 onMounted(async () => {
   const res = await projectApi.list();
@@ -213,20 +247,25 @@ onMounted(async () => {
   await loadTodos();
 });
 
-async function onDateChange() {
-  result.value = null;
-  pendingQuestions.value = [];
-  messages.value = [];
-  history.value = [];
-  await loadTodos();
-}
-
 async function loadTodos() {
   try {
-    const res = await todoApi.list(form.logDate);
+    const res = await todoApi.list(logDate);
     todos.value = res.data || [];
   } catch {
     todos.value = [];
+  }
+}
+
+/** 待办实时保存（整份替换） */
+async function persistTodos() {
+  try {
+    const res = await todoApi.save({
+      date: logDate,
+      items: todos.value.map((t) => ({ content: t.content, status: t.status })),
+    });
+    todos.value = res.data || [];
+  } catch {
+    ElMessage.error('待办保存失败，请重试');
   }
 }
 
@@ -235,33 +274,22 @@ function addTodo() {
   if (!c) return;
   todos.value.push({ id: 0, content: c, status: 'pending', sort_order: todos.value.length });
   newTodoText.value = '';
+  persistTodos();
 }
 
 function removeTodo(i: number) {
   todos.value.splice(i, 1);
+  persistTodos();
 }
 
 function toggleTodo(i: number, val: boolean) {
   todos.value[i].status = val ? 'done' : 'pending';
-}
-
-async function saveTodos() {
-  savingTodo.value = true;
-  try {
-    const res = await todoApi.save({
-      date: form.logDate,
-      items: todos.value.map((t) => ({ content: t.content, status: t.status })),
-    });
-    todos.value = res.data || [];
-    ElMessage.success('待办已保存');
-  } finally {
-    savingTodo.value = false;
-  }
+  persistTodos();
 }
 
 function startGenerate() {
-  if (!form.projectId) {
-    ElMessage.warning('请先选择所属项目');
+  if (!projectId.value) {
+    ElMessage.warning('请先在上方选择所属项目');
     return;
   }
   messages.value.push({ role: 'user', text: '根据今日待办和执行情况，帮我生成今天的日志。' });
@@ -274,8 +302,8 @@ async function runAssist() {
   assisting.value = true;
   try {
     const res = await logApi.assist({
-      date: form.logDate,
-      projectId: form.projectId ?? null,
+      date: logDate,
+      projectId: projectId.value ?? null,
       todos: todos.value.map((t) => ({ content: t.content, status: t.status })),
       history: history.value,
       provider: 'qwen',
@@ -283,9 +311,16 @@ async function runAssist() {
     const data: any = (res as any).data;
     if (data.action === 'done' && data.result) {
       result.value = data.result;
+      resultView.value = 'preview';
       pendingQuestions.value = [];
-      if (data.result.hours != null) form.hours = data.result.hours;
-      messages.value.push({ role: 'assistant', text: '日志已生成，请在右侧检查确认。' });
+      messages.value.push({
+        role: 'assistant',
+        text: '✅ 质量检查通过，日志已按「好日志规范」优化生成。\n\n请在右侧检查确认，可直接编辑，确认无误后点击「确认保存日志」。',
+      });
+      history.value.push({
+        role: 'assistant',
+        content: '质量检查通过，日志已优化生成，请在右侧确认保存。',
+      });
     } else {
       pendingQuestions.value = data.questions || [];
       qaAnswers.value = {};
@@ -295,8 +330,11 @@ async function runAssist() {
             `${i + 1}. ${q.question}${q.options?.length ? `（选项：${q.options.join(' / ')}）` : ''}`
         )
         .join('\n');
+      messages.value.push({
+        role: 'assistant',
+        text: '🔍 质量检查发现以下信息需要补充：\n\n' + qtext,
+      });
       history.value.push({ role: 'assistant', content: '请补充以下信息：\n' + qtext });
-      messages.value.push({ role: 'assistant', text: '我需要确认以下几点：\n' + qtext });
     }
   } finally {
     assisting.value = false;
@@ -327,17 +365,17 @@ async function saveLog() {
     ElMessage.warning('请先生成日志');
     return;
   }
-  if (!form.projectId) {
+  if (!projectId.value) {
     ElMessage.warning('请选择所属项目');
     return;
   }
-  // 原始内容：保留待办执行情况作为原始依据
-  const rawParts = ['今日待办执行情况：' + todos.value
-    .map((t) => `${t.status === 'done' ? '[完成]' : '[未完成]'}${t.content}`)
-    .join('；')];
-  const content = rawParts.join('\n');
 
-  // AI 识别的小组名 → 项目小组 id 映射（工时在项目级统一填写，组内不再分摊）
+  // 原始内容：保留待办执行情况作为原始依据
+  const content =
+    '今日待办执行情况：' +
+    todos.value.map((t) => `${t.status === 'done' ? '[完成]' : '[未完成]'}${t.content}`).join('；');
+
+  // AI 识别的小组名 → 项目小组 id 映射（工时在项目级，由 AI 从补充说明推断，可空）
   const groups = (result.value.groups || [])
     .map((g) => {
       const grp = projectGroups.value.find((pg) => pg.name === g.name);
@@ -348,12 +386,12 @@ async function saveLog() {
   saving.value = true;
   try {
     await logApi.save({
-      logDate: form.logDate,
-      projectId: form.projectId,
+      logDate,
+      projectId: projectId.value,
       content,
       optimizedContent: result.value.content,
       aiProvider: 'qwen',
-      hours: form.hours,
+      hours: result.value.hours ?? undefined,
       groups,
     });
     ElMessage.success('日志保存成功');
@@ -377,6 +415,7 @@ async function saveLog() {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
 }
 
 /* 待办 */
@@ -387,9 +426,8 @@ async function saveLog() {
 }
 
 .todo-list {
-  max-height: 320px;
+  max-height: 460px;
   overflow-y: auto;
-  margin-bottom: 12px;
 }
 
 .todo-item {
@@ -413,11 +451,75 @@ async function saveLog() {
   color: var(--text-secondary, #909399);
 }
 
-.todo-actions {
+/* 快捷操作 */
+.quick-actions {
   display: flex;
   gap: 8px;
-  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+/* 填写要点（与旧版一致） */
+.write-tips {
+  margin-bottom: 12px;
+  border: 1px dashed var(--border-color, #dcdfe6);
+  border-radius: 8px;
+  background: var(--bg-hover, #f8f9fb);
+}
+
+.write-tips :deep(.el-collapse-item__header) {
+  padding: 0 12px;
+  background: transparent;
+  height: 36px;
+  line-height: 36px;
+}
+
+.write-tips :deep(.el-collapse-item__wrap) {
+  background: transparent;
+  border-bottom: none;
+}
+
+.write-tips :deep(.el-collapse-item__content) {
+  padding: 0 16px 12px;
+}
+
+.write-tips-title {
+  display: inline-flex;
   align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary-color, #409eff);
+}
+
+.write-tips-body {
+  font-size: 13px;
+  color: var(--text-regular, #606266);
+  line-height: 1.7;
+}
+
+.write-tips-body ol {
+  padding-left: 18px;
+  margin: 6px 0;
+}
+
+.write-tips-body li {
+  margin: 3px 0;
+}
+
+.write-tips-slogan {
+  margin: 0 0 6px;
+}
+
+.write-tips-template {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  background: var(--el-fill-color-light);
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 /* 对话 */
@@ -428,8 +530,8 @@ async function saveLog() {
 
 .chat-body {
   flex: 1;
-  min-height: 320px;
-  max-height: 480px;
+  min-height: 280px;
+  max-height: 420px;
   overflow-y: auto;
   padding: 4px;
   margin-bottom: 12px;
@@ -449,18 +551,18 @@ async function saveLog() {
 }
 
 .chat-bubble {
-  max-width: 85%;
+  max-width: 88%;
   padding: 9px 12px;
   border-radius: 10px;
   font-size: 13px;
   line-height: 1.6;
-  white-space: pre-wrap;
   word-break: break-all;
 }
 
 .chat-msg.user .chat-bubble {
   background: var(--primary-color, #409eff);
   color: #fff;
+  white-space: pre-wrap;
   border-bottom-right-radius: 2px;
 }
 
@@ -470,6 +572,38 @@ async function saveLog() {
   border-bottom-left-radius: 2px;
 }
 
+/* AI 气泡内的 Markdown 适配 */
+.chat-msg.assistant .chat-bubble :deep(.md-preview.markdown-body) {
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.chat-msg.assistant .chat-bubble :deep(.md-preview.markdown-body p) {
+  margin: 4px 0;
+}
+
+.chat-msg.assistant .chat-bubble :deep(.md-preview.markdown-body ol),
+.chat-msg.assistant .chat-bubble :deep(.md-preview.markdown-body ul) {
+  padding-left: 18px;
+  margin: 4px 0;
+}
+
+.chat-msg.assistant .chat-bubble :deep(.md-preview.markdown-body h1),
+.chat-msg.assistant .chat-bubble :deep(.md-preview.markdown-body h2),
+.chat-msg.assistant .chat-bubble :deep(.md-preview.markdown-body h3),
+.chat-msg.assistant .chat-bubble :deep(.md-preview.markdown-body h4),
+.chat-msg.assistant .chat-bubble :deep(.md-preview.markdown-body p:first-child) {
+  margin-top: 0;
+}
+
+.chat-msg.assistant .chat-bubble :deep(.md-preview.markdown-body h1),
+.chat-msg.assistant .chat-bubble :deep(.md-preview.markdown-body h2),
+.chat-msg.assistant .chat-bubble :deep(.md-preview.markdown-body h3),
+.chat-msg.assistant .chat-bubble :deep(.md-preview.markdown-body h4) {
+  margin-bottom: 0;
+}
+
+/* 质量检查问答面板 */
 .qa-panel {
   margin-top: 8px;
   padding: 12px;
@@ -527,7 +661,7 @@ async function saveLog() {
   font-size: 13px;
 }
 
-.group-hours-note {
+.group-note {
   margin-top: 10px;
   font-size: 12px;
   color: var(--text-secondary, #909399);
