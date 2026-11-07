@@ -35,9 +35,19 @@
                 <tr><td>修 Bug</td><td>修复登录 token 过期闪退问题（BUG-128），已上线</td></tr>
                 <tr><td>继续做</td><td>智能体问答功能开发（进度 80%），剩余评测模块</td></tr>
               </table>
-              <p class="tips-score">
-                评分构成：事项具体性 30 分 / 成果量化 20 分 / 工时明确 20 分 / 明日计划 15 分 / 问题与风险 15 分；一条一件事，写结果不写过程
-              </p>
+              <p class="tips-structure-title">评分构成（满分 100）：</p>
+              <ol class="tips-score-list">
+                <li><strong>规范符合度 40 分</strong>：结构层级正确（10）＋ 投入时长明确（10）＋ 明日计划（10）＋ 问题与风险（10，如实写"无"不扣）</li>
+                <li>
+                  <strong>事项质量 60 分</strong>：每条事项按五条标准逐条核对，取平均折算——
+                  ① 有具体对象（融进句子，如模块/页面/接口/文档/Bug号）
+                  ② 有进展状态（完成 / 进行中百分比 / 受阻）
+                  ③ 有量化成果（数字/产出物，如实说明）
+                  ④ 一条一件事
+                  ⑤ 写结果不写过程（排查类写根因结论）
+                  笼统表述（"处理了一些工作""继续做"）按条扣分
+                </li>
+              </ol>
             </div>
           </el-popover>
         </div>
@@ -645,6 +655,18 @@ async function doSave(pid: number) {
   margin: 8px 0 0;
   font-size: 12px;
   color: var(--text-secondary, #909399);
+}
+
+.tips-score-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--text-secondary, #909399);
+  line-height: 1.8;
+}
+
+.tips-score-list li {
+  margin: 4px 0;
 }
 
 .tips-table {
