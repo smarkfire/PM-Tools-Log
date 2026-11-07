@@ -96,6 +96,57 @@ export const logApi = {
     history?: { role: 'user' | 'assistant'; content: string }[];
     provider?: string;
   }) => request.post<AssistResult>('/logs/assist', data),
+  /**
+   * 新版填报：流式 AI 生成（SSE）
+   * onThink 实时回调思考过程增量文本；onFinal 返回结构化检查结果；onError 返回错误信息
+   */
+  assistStream: async (
+    data: {
+      date: string;
+      projectId?: number | null;
+      todos?: { content: string; status: string }[];
+      history?: { role: 'user' | 'assistant'; content: string }[];
+      provider?: string;
+    },
+    handlers: {
+      onThink: (text: string) => void;
+      onFinal: (data: AssistResult) => void;
+      onError: (message: string) => void;
+    }
+  ) => {
+    const token = localStorage.getItem('token');
+    const res = await fetch('/api/logs/assist', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok || !res.body) throw new Error(`请求失败(${res.status})`);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const parts = buf.split('\n\n');
+      buf = parts.pop() || '';
+      for (const part of parts) {
+        const line = part.trim();
+        if (!line.startsWith('data:')) continue;
+        try {
+          const evt = JSON.parse(line.slice(5).trim());
+          if (evt.type === 'think') handlers.onThink(evt.text || '');
+          else if (evt.type === 'final') handlers.onFinal(evt.data);
+          else if (evt.type === 'error') handlers.onError(evt.message || 'AI 调用失败');
+        } catch {
+          // 忽略不完整分片
+        }
+      }
+    }
+  },
   stats: (params?: { projectId?: number; startDate?: string; endDate?: string }) =>
     request.get<LogStats>('/logs/stats', { params }),
 };
@@ -107,9 +158,12 @@ export interface AssistQuestion {
   options: string[];
 }
 export interface AssistResult {
-  action: 'ask' | 'done';
+  action: 'ask' | 'continue' | 'done';
+  score?: number | null;
+  summary?: string;
   questions: AssistQuestion[];
   result: {
+    project?: string;
     content: string;
     hours: number | null;
     groups: { name: string; hours: number | null }[];

@@ -115,8 +115,12 @@
           <div class="chat-body" ref="chatBodyEl">
             <div v-for="(m, i) in messages" :key="i" class="chat-msg" :class="m.role">
               <div class="chat-bubble">
-                <MdPreview v-if="m.role === 'assistant'" :content="m.text" />
-                <template v-else>{{ m.text }}</template>
+                <div v-if="m.think" class="think-block" :class="{ streaming: m.streaming }">
+                  <div class="think-label">🤔 AI 思考过程</div>
+                  <div class="think-text">{{ m.think }}<span v-if="m.streaming" class="think-cursor"></span></div>
+                </div>
+                <MdPreview v-if="m.role === 'assistant' && m.text" :content="m.text" />
+                <template v-else-if="m.role === 'user'">{{ m.text }}</template>
 
                 <!-- 优化后的日志卡片（内嵌在 AI 回复里） -->
                 <div v-if="m.logResult" class="log-result-card">
@@ -294,6 +298,8 @@ interface AssistResult {
 interface ChatMsg {
   role: 'user' | 'assistant';
   text: string;
+  think?: string;
+  streaming?: boolean;
   logResult?: AssistResult | null;
   viewMode?: 'preview' | 'edit';
 }
@@ -391,7 +397,13 @@ function startGenerate() {
     ElMessage.warning('尚未配置可用的大模型，请联系管理员');
     return;
   }
-  messages.value.push({ role: 'user', text: '根据今日待办和执行情况，帮我生成今天的日志。' });
+  const hasTodos = todos.value.length > 0;
+  messages.value.push({
+    role: 'user',
+    text: hasTodos
+      ? '根据今日待办和执行情况，帮我生成今天的日志。'
+      : '今天没有填写待办，请按标准日志模板帮我起草今天的日志。',
+  });
   history.value = [];
   result.value = null;
   pendingQuestions.value = [];
@@ -400,55 +412,86 @@ function startGenerate() {
 
 async function runAssist() {
   assisting.value = true;
+  // AI 回复消息：思考过程流式追加，最终结果到达后填充正文（reactive 保证流式更新生效）
+  const msg = reactive<ChatMsg>({ role: 'assistant', text: '', think: '', streaming: true });
+  messages.value.push(msg);
+
+  let finalData: any = null;
+  let errMsg = '';
   try {
-    const res = await logApi.assist({
-      date: logDate.value,
-      projectId: null,
-      todos: todos.value.map((t) => ({ content: t.content, status: t.status })),
-      history: history.value,
-      provider: provider.value,
-    });
-    const data: any = (res as any).data;
-    if (data.action === 'done' && data.result) {
+    await logApi.assistStream(
+      {
+        date: logDate.value,
+        projectId: null,
+        todos: todos.value.map((t) => ({ content: t.content, status: t.status })),
+        history: history.value,
+        provider: provider.value,
+      },
+      {
+        onThink: (t) => {
+          msg.think = (msg.think || '') + t;
+          scrollChat();
+        },
+        onFinal: (d) => {
+          finalData = d;
+        },
+        onError: (m) => {
+          errMsg = m;
+        },
+      }
+    );
+    msg.streaming = false;
+
+    if (errMsg) {
+      msg.text = '⚠️ 生成失败：' + errMsg + '\n\n请检查模型配置后重试。';
+      ElMessage.error('生成失败：' + errMsg);
+      return;
+    }
+
+    const data = finalData;
+    if (data && data.action === 'done' && data.result) {
       result.value = data.result;
       pendingQuestions.value = [];
-      messages.value.push({
-        role: 'assistant',
-        text: '✅ 质量检查通过，日志已按「好日志规范」优化生成。\n\n请在下方卡片中检查确认，可直接编辑，确认无误后点击「确认保存日志」。',
-        logResult: data.result,
-        viewMode: 'preview',
-      });
+      msg.text =
+        `✅ 质量检查通过${data.score != null ? `（${data.score} 分）` : ''}：${data.summary || '日志已按「好日志规范」优化生成'}\n\n` +
+        '请在下方卡片中检查确认，可直接编辑，确认无误后点击「确认保存日志」。';
+      msg.logResult = data.result;
+      msg.viewMode = 'preview';
       history.value.push({
         role: 'assistant',
-        content: '质量检查通过，日志已优化生成，请在卡片中确认保存。',
+        content: `质量检查通过${data.score != null ? `（${data.score}分）` : ''}，日志已优化生成。`,
       });
-    } else {
+    } else if (data) {
       pendingQuestions.value = data.questions || [];
       qaAnswers.value = {};
       pendingQuestions.value.forEach((_q, i) => {
         qaAnswers.value[i] = { choice: '', other: '' };
       });
-      const qtext = pendingQuestions.value
-        .map(
-          (q: any, i: number) =>
-            `${i + 1}. ${q.question}${q.options?.length ? `（选项：${q.options.join(' / ')}）` : ''}`
-        )
-        .join('\n');
-      messages.value.push({
+      msg.text =
+        `🔍 质量检查${data.score != null ? `：${data.score} 分，未达到 80 分` : ''}\n\n${data.summary || ''}\n\n` +
+        '请在下方回答补充问题（可选选项或自行填写），提交后 AI 将重新生成并再次检查。';
+      history.value.push({
         role: 'assistant',
-        text: '🔍 质量检查发现以下信息需要补充：\n\n' + qtext,
+        content:
+          `质量检查${data.score != null ? data.score + '分' : ''}：${data.summary || ''}。需要用户补充：` +
+          pendingQuestions.value.map((q: any, i: number) => `${i + 1}.${q.question}`).join('；'),
       });
-      history.value.push({ role: 'assistant', content: '请补充以下信息：\n' + qtext });
     }
-    await nextTick();
-    chatBodyEl.value?.scrollTo({ top: chatBodyEl.value.scrollHeight, behavior: 'smooth' });
+    scrollChat();
   } catch (e: any) {
-    const msg = e?.response?.data?.message || e?.message || '网络异常';
-    ElMessage.error('生成失败：' + msg);
-    messages.value.push({ role: 'assistant', text: '⚠️ 生成失败：' + msg + '\n\n请检查模型配置后重试。' });
+    msg.streaming = false;
+    const em = e?.message || '网络异常';
+    msg.text = '⚠️ 生成失败：' + em + '\n\n请检查模型配置后重试。';
+    ElMessage.error('生成失败：' + em);
   } finally {
     assisting.value = false;
   }
+}
+
+/** 聊天区滚动到底部 */
+async function scrollChat() {
+  await nextTick();
+  chatBodyEl.value?.scrollTo({ top: chatBodyEl.value.scrollHeight, behavior: 'smooth' });
 }
 
 async function submitAnswers() {
@@ -738,6 +781,48 @@ async function doSave(pid: number) {
 .chat-msg.assistant .chat-bubble :deep(.md-preview.markdown-body h3),
 .chat-msg.assistant .chat-bubble :deep(.md-preview.markdown-body h4) {
   margin-bottom: 0;
+}
+
+/* AI 思考过程块（流式输出） */
+.think-block {
+  background: rgba(0, 0, 0, 0.035);
+  border-left: 3px solid #c0c4cc;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  font-size: 12.5px;
+  color: var(--text-secondary, #909399);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.think-label {
+  font-weight: 600;
+  font-size: 12px;
+  margin-bottom: 4px;
+  color: var(--text-regular, #a8abb2);
+}
+
+.think-text {
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.6;
+}
+
+.think-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 13px;
+  background: var(--primary-color, #409eff);
+  margin-left: 2px;
+  vertical-align: -2px;
+  animation: think-blink 1s infinite;
+}
+
+@keyframes think-blink {
+  50% {
+    opacity: 0;
+  }
 }
 
 /* 内嵌的优化日志卡片 */

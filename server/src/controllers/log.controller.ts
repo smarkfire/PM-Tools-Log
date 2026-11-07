@@ -11,7 +11,7 @@ import { Request, Response } from 'express';
 import { queryMany, queryOne } from '../config/db';
 import { success, fail } from '../utils/response';
 import { getDataScope } from '../services/permission.service';
-import { chat, AiProvider, ChatMessage } from '../services/ai.service';
+import { chat, chatStream, AiProvider, ChatMessage } from '../services/ai.service';
 import { getUserAiConfig } from '../services/config.service';
 import { getEffectivePrompt } from '../services/prompt.service';
 
@@ -464,19 +464,49 @@ export async function assistLog(req: Request, res: Response) {
   ];
 
   const userAiConfig = await getUserAiConfig(userId);
-  const raw = await chat(aiProvider, messages, {
-    temperature: 0.3,
-    override: aiProvider === 'qwen' ? userAiConfig.qwen : userAiConfig.deepseek,
-  });
 
-  res.json(success(parseAssistResult(raw)));
+  // SSE 流式输出：先实时推送思考过程（think），AI 完整返回后解析并推送结构化结果
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  const send = (obj: unknown) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
+  const SEP = '===JSON===';
+
+  let full = '';
+  let sentThink = 0; // 已推送的思考文本长度
+  try {
+    for await (const chunk of chatStream(aiProvider, messages, {
+      temperature: 0.3,
+      override: aiProvider === 'qwen' ? userAiConfig.qwen : userAiConfig.deepseek,
+    })) {
+      full += chunk;
+      const sepIdx = full.indexOf(SEP);
+      const thinkEnd = sepIdx >= 0 ? sepIdx : full.length;
+      if (thinkEnd > sentThink) {
+        send({ type: 'think', text: full.slice(sentThink, thinkEnd) });
+        sentThink = thinkEnd;
+      }
+    }
+    const sepIdx = full.indexOf(SEP);
+    const jsonText = sepIdx >= 0 ? full.slice(sepIdx + SEP.length) : full;
+    send({ type: 'final', data: parseAssistResult(jsonText) });
+  } catch (e: any) {
+    send({ type: 'error', message: e?.message || 'AI 调用失败' });
+  }
+  send({ type: 'end' });
+  res.end();
 }
 
 /** 解析 AI 返回的 JSON（容错：剥离围栏 / 多余文字） */
 function parseAssistResult(raw: string): {
-  action: 'ask' | 'done';
+  action: 'continue' | 'done';
+  score: number | null;
+  summary: string;
   questions: { field: string; question: string; options: string[] }[];
-  result: { content: string; hours: number | null; groups: { name: string; hours: number | null }[] } | null;
+  result: { project?: string; content: string; hours: number | null; groups: { name: string; hours: number | null }[] } | null;
 } {
   let text = raw.trim();
   const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -489,10 +519,13 @@ function parseAssistResult(raw: string): {
     const questions = Array.isArray(obj.questions) ? obj.questions : [];
     const result = obj.action === 'done' && obj.result ? obj.result : null;
     return {
-      action: obj.action === 'done' ? 'done' : 'ask',
+      action: obj.action === 'done' ? 'done' : 'continue',
+      score: typeof obj.score === 'number' ? Math.round(obj.score) : null,
+      summary: String(obj.summary || ''),
       questions,
       result: result
         ? {
+            project: typeof result.project === 'string' ? result.project : '',
             content: String(result.content || ''),
             hours: typeof result.hours === 'number' ? result.hours : null,
             groups: Array.isArray(result.groups) ? result.groups : [],
@@ -501,7 +534,13 @@ function parseAssistResult(raw: string): {
     };
   } catch {
     // 解析失败：降级为最终结果，把原文当日志内容
-    return { action: 'done', questions: [], result: { content: raw, hours: null, groups: [] } };
+    return {
+      action: 'done',
+      score: null,
+      summary: 'AI 结果解析失败，已将原文作为日志内容',
+      questions: [],
+      result: { project: '', content: raw, hours: null, groups: [] },
+    };
   }
 }
 

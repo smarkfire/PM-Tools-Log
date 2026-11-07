@@ -86,3 +86,82 @@ export async function chat(
     clearTimeout(timeout);
   }
 }
+
+/**
+ * 调用 AI 对话接口（流式）：逐段产出增量文本（OpenAI 兼容 SSE）
+ */
+export async function* chatStream(
+  provider: AiProvider,
+  messages: ChatMessage[],
+  options?: {
+    temperature?: number;
+    maxTokens?: number;
+    override?: ProviderOverride;
+  }
+): AsyncGenerator<string> {
+  const cfg = options?.override ?? getEnvConfig(provider);
+  if (!cfg.apiKey) {
+    throw new Error(
+      `${provider === 'qwen' ? '通义千问' : 'DeepSeek'} 未配置 API Key：请在"个人设置-AI 配置"填写自己的 Key，或联系管理员在系统设置中配置`
+    );
+  }
+
+  const body: Record<string, unknown> = {
+    model: cfg.model,
+    messages,
+    stream: true,
+    temperature: options?.temperature ?? 0.7,
+  };
+  if (options?.maxTokens) {
+    body.max_tokens = options.maxTokens;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), env.ai.timeoutMs);
+
+  try {
+    const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${cfg.apiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`AI 接口调用失败(${res.status}): ${errText.slice(0, 200)}`);
+    }
+    if (!res.body) {
+      throw new Error('AI 未返回流式内容');
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop() || '';
+      for (const line of lines) {
+        const t = line.trim();
+        if (!t.startsWith('data:')) continue;
+        const payload = t.slice(5).trim();
+        if (!payload || payload === '[DONE]') continue;
+        try {
+          const obj = JSON.parse(payload);
+          const delta = obj.choices?.[0]?.delta?.content;
+          if (delta) yield delta as string;
+        } catch {
+          // 忽略不完整分片
+        }
+      }
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+}
