@@ -167,7 +167,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { chatApi } from '../../api';
 import { useUserStore } from '../../stores/user';
@@ -295,14 +295,15 @@ async function sendMessage(text: string) {
   streamStarted.value = false;
   try {
     // 流式接收：先收思考过程，再收正文，实时渲染到本地临时消息上
-    const liveMsg: ChatMessage = {
+    // （必须用 reactive 包裹：直接改原始对象引用绕过 Vue 响应式代理，UI 不会流式更新）
+    const liveMsg = reactive<ChatMessage>({
       id: Date.now() + 1,
       conversation_id: currentConvId.value!,
       role: 'assistant',
       content: '',
       think: '',
       created_at: new Date().toISOString(),
-    };
+    });
     let liveAdded = false;
     const ensureLive = () => {
       if (!liveAdded) {
