@@ -3,7 +3,7 @@
     <div class="page-header">
       <div class="header-left">
         <div class="page-title">
-          填写日志 · 新版
+          填写日志Agent
           <el-popover placement="bottom-start" :width="560" trigger="hover" popper-class="tips-popover-popper">
             <template #reference>
               <el-icon class="tips-trigger"><InfoFilled /></el-icon>
@@ -91,8 +91,11 @@
           <div class="todo-input-row">
             <el-input
               v-model="newTodoText"
-              placeholder="添加一条待办，回车确认"
-              @keyup.enter="addTodo"
+              type="textarea"
+              :rows="2"
+              :autosize="{ minRows: 2, maxRows: 6 }"
+              placeholder="添加一条待办：Enter 保存，Shift+Enter 换行，可输入长文本"
+              @keydown.enter="handleTodoEnter"
             />
             <el-button type="primary" size="small" @click="addTodo">添加</el-button>
           </div>
@@ -111,12 +114,12 @@
         </el-card>
       </el-col>
 
-      <!-- 右：今日日志 · AI 对话（主区） -->
+      <!-- 右：日志填写Agent 对话（主区） -->
       <el-col :xs="24" :md="17">
         <el-card shadow="never" class="block-card chat-card">
           <template #header>
             <div class="card-head-row">
-              <span class="card-title">今日日志 · AI 对话</span>
+              <span class="card-title">日志填写Agent</span>
               <div class="quick-actions">
                 <el-button
                   type="primary"
@@ -190,28 +193,28 @@
               <div v-for="(q, qi) in pendingQuestions" :key="qi" class="qa-item">
                 <div class="qa-question">{{ qi + 1 }}. {{ q.question }}</div>
 
-                <!-- 项目：从参与的项目中选择（可多选） -->
+                <!-- 项目：从参与的项目中选择（单选） -->
                 <el-select
                   v-if="q.field === 'project'"
-                  v-model="qaAnswers[qi].multi"
-                  multiple
+                  v-model="qaAnswers[qi].choice"
                   filterable
-                  placeholder="请选择项目（可多选）"
+                  clearable
+                  placeholder="请选择项目"
                   style="width: 100%"
                 >
                   <el-option v-for="name in myProjectNames" :key="name" :label="name" :value="name" />
                 </el-select>
 
-                <!-- 小组：从参与的小组中选择（可多选） -->
+                <!-- 小组：随所选项目联动（单选）；未选项目时展示全部参与小组 -->
                 <el-select
                   v-else-if="q.field === 'group'"
-                  v-model="qaAnswers[qi].multi"
-                  multiple
+                  v-model="qaAnswers[qi].choice"
                   filterable
-                  placeholder="请选择小组（可多选）"
+                  clearable
+                  :placeholder="qaGroupOptions.length ? '请选择小组' : '暂无可选小组'"
                   style="width: 100%"
                 >
-                  <el-option v-for="name in myGroupNames" :key="name" :label="name" :value="name" />
+                  <el-option v-for="name in qaGroupOptions" :key="name" :label="name" :value="name" />
                 </el-select>
 
                 <!-- 工时：数字控件 -->
@@ -393,6 +396,18 @@ const myProjectOptions = ref<{ name: string; groups: string[] }[]>([]);
 const myProjectNames = computed(() => myProjectOptions.value.map((p) => p.name));
 const myGroupNames = computed(() => [...new Set(myProjectOptions.value.flatMap((p) => p.groups))]);
 
+/** 问答中已选择的所属项目（用于小组下拉联动） */
+const qaProjectAnswer = computed(() => {
+  const idx = pendingQuestions.value.findIndex((q: any) => q.field === 'project');
+  return idx >= 0 ? qaAnswers.value[idx]?.choice || '' : '';
+});
+
+/** 小组候选：随所选项目联动；未选项目时展示全部参与小组 */
+const qaGroupOptions = computed(() => {
+  if (!qaProjectAnswer.value) return myGroupNames.value;
+  return myProjectOptions.value.find((p) => p.name === qaProjectAnswer.value)?.groups || [];
+});
+
 onMounted(async () => {
   const [providerRes, todoRes, projectRes] = await Promise.all([
     chatApi.providers().catch(() => null),
@@ -452,6 +467,13 @@ function addTodo() {
   todos.value.push({ id: 0, content: c, status: 'pending', sort_order: todos.value.length });
   newTodoText.value = '';
   persistTodos();
+}
+
+/** 待办输入框回车：Enter 保存，Shift+Enter 换行 */
+function handleTodoEnter(e: KeyboardEvent) {
+  if (e.shiftKey) return;
+  e.preventDefault();
+  addTodo();
 }
 
 function removeTodo(i: number) {
@@ -567,13 +589,13 @@ async function scrollChat() {
 }
 
 async function submitAnswers() {
-  // 组装各题答案：项目/小组取多选、工时取数字，其余取选项或自由输入
+  // 组装各题答案：项目/小组取单选、工时取数字，其余取选项或自由输入
   const answers = pendingQuestions.value.map((q: any, i: number) => {
     const a =
       qaAnswers.value[i] || { choice: '', other: '', multi: [] as string[], number: null as number | null };
     let answer: string;
     if (q.field === 'project' || q.field === 'group') {
-      answer = a.multi.join('、');
+      answer = a.choice;
     } else if (q.field === 'hours') {
       answer = a.number != null ? `${a.number} 小时` : '';
     } else if (a.choice === '__other__') {
@@ -867,8 +889,13 @@ async function doSave() {
 .todo-input-row {
   flex-shrink: 0;
   display: flex;
+  align-items: flex-start;
   gap: 8px;
   margin-bottom: 12px;
+}
+
+.todo-input-row .el-button {
+  margin-top: 4px;
 }
 
 .todo-list {
@@ -880,7 +907,7 @@ async function doSave() {
 
 .todo-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   padding: 8px 10px;
   border-radius: 8px;
@@ -888,10 +915,18 @@ async function doSave() {
   margin-bottom: 6px;
 }
 
+/* 长待办文本换行展示 */
+.todo-item .el-checkbox {
+  height: auto;
+}
+
 .todo-item .todo-content {
   flex: 1;
+  min-width: 0;
   font-size: 13px;
-  word-break: break-all;
+  word-break: break-word;
+  white-space: pre-wrap;
+  line-height: 1.5;
 }
 
 .todo-item.done .todo-content {
