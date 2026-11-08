@@ -98,9 +98,15 @@ export interface WorkLog {
 }
 
 export interface LogStats {
+  scopeType: 'self' | 'team';
   total: number;
   today: number;
   activeUsers: number;
+  avgScore: number | null;
+  todayScore: number | null;
+  todayUsers: number;
+  weekProgress: { filled: number; total: number };
+  trend7d: { date: string; cnt: number }[];
   byProject: { id: number; name: string; cnt: number }[];
 }
 

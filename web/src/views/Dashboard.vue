@@ -14,56 +14,52 @@
       </el-button>
     </div>
 
-    <!-- 统计卡片（响应式栅格） -->
+    <!-- 本周填写进度（行动导向） -->
+    <el-card shadow="never" class="week-card">
+      <div class="week-head">
+        <div class="week-head-left">
+          <el-icon class="week-icon"><Calendar /></el-icon>
+          <span class="week-title">本周填写进度</span>
+        </div>
+        <span class="week-count">
+          {{ stats.weekProgress.filled }} <em>/ {{ stats.weekProgress.total }}</em> 天
+        </span>
+      </div>
+      <el-progress
+        :percentage="weekPercent"
+        :stroke-width="12"
+        :show-text="false"
+        :color="weekPercent >= 100 ? '#67c23a' : '#409eff'"
+        class="week-progress"
+      />
+      <div class="week-foot">
+        <span v-if="weekPercent >= 100" class="week-tip week-tip--done">本周日志已填满，继续保持！</span>
+        <span v-else class="week-tip">
+          本周还有 <strong>{{ stats.weekProgress.total - stats.weekProgress.filled }}</strong> 天未填，记得记录工作哦
+        </span>
+        <el-button
+          v-if="weekPercent < 100"
+          link
+          type="primary"
+          size="small"
+          @click="$router.push('/logs/write')"
+        >
+          去填写
+        </el-button>
+      </div>
+    </el-card>
+
+    <!-- 统计卡片（按数据权限视图区分团队/个人） -->
     <el-row :gutter="16" class="stat-row">
-      <el-col :xs="12" :sm="6">
-        <el-card shadow="hover" class="stat-card stat-card--blue">
+      <el-col v-for="c in cards" :key="c.label" :xs="12" :sm="6">
+        <el-card shadow="hover" class="stat-card" :class="'stat-card--' + c.color">
           <div class="stat-item">
             <div class="stat-icon">
-              <el-icon :size="22"><Document /></el-icon>
+              <el-icon :size="22"><component :is="c.icon" /></el-icon>
             </div>
             <div class="stat-info">
-              <div class="stat-value">{{ stats.total }}</div>
-              <div class="stat-label">日志总数</div>
-            </div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :xs="12" :sm="6">
-        <el-card shadow="hover" class="stat-card stat-card--green">
-          <div class="stat-item">
-            <div class="stat-icon">
-              <el-icon :size="22"><Calendar /></el-icon>
-            </div>
-            <div class="stat-info">
-              <div class="stat-value">{{ stats.today }}</div>
-              <div class="stat-label">今日已填</div>
-            </div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :xs="12" :sm="6">
-        <el-card shadow="hover" class="stat-card stat-card--orange">
-          <div class="stat-item">
-            <div class="stat-icon">
-              <el-icon :size="22"><User /></el-icon>
-            </div>
-            <div class="stat-info">
-              <div class="stat-value">{{ stats.activeUsers }}</div>
-              <div class="stat-label">活跃成员</div>
-            </div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :xs="12" :sm="6">
-        <el-card shadow="hover" class="stat-card stat-card--purple">
-          <div class="stat-item">
-            <div class="stat-icon">
-              <el-icon :size="22"><Folder /></el-icon>
-            </div>
-            <div class="stat-info">
-              <div class="stat-value">{{ projects.length }}</div>
-              <div class="stat-label">参与项目</div>
+              <div class="stat-value">{{ c.display }}</div>
+              <div class="stat-label">{{ c.label }}</div>
             </div>
           </div>
         </el-card>
@@ -110,7 +106,26 @@
       </el-col>
     </el-row>
 
-    <!-- 项目日志分布 -->
+    <!-- 近 7 日填写趋势（主图） -->
+    <el-card shadow="never" class="trend-card">
+      <template #header>
+        <div class="dist-header">
+          <span class="card-title">近 7 日填写趋势</span>
+          <span class="dist-hint">{{ stats.scopeType === 'team' ? '团队' : '我的' }} · 按天统计</span>
+        </div>
+      </template>
+      <div class="trend-chart">
+        <div v-for="d in trend7dFull" :key="d.date" class="trend-col">
+          <span class="trend-val">{{ d.cnt }}</span>
+          <div class="trend-bar-track">
+            <div class="trend-bar" :style="{ height: d.height + 'px' }"></div>
+          </div>
+          <span class="trend-date" :class="{ 'trend-today': d.isToday }">{{ d.label }}</span>
+        </div>
+      </div>
+    </el-card>
+
+    <!-- 各项目日志分布（次图） -->
     <el-card shadow="never" v-if="stats.byProject?.length" class="dist-card">
       <template #header>
         <div class="dist-header">
@@ -148,7 +163,18 @@ import { useUserStore } from '../stores/user';
 import type { LogStats, Project } from '../types';
 
 const userStore = useUserStore();
-const stats = ref<LogStats>({ total: 0, today: 0, activeUsers: 0, byProject: [] });
+const stats = ref<LogStats>({
+  scopeType: 'self',
+  total: 0,
+  today: 0,
+  activeUsers: 0,
+  avgScore: null,
+  todayScore: null,
+  todayUsers: 0,
+  weekProgress: { filled: 0, total: 5 },
+  trend7d: [],
+  byProject: [],
+});
 const projects = ref<Project[]>([]);
 
 const greeting = computed(() => {
@@ -158,6 +184,61 @@ const greeting = computed(() => {
   if (h < 14) return '中午好';
   if (h < 18) return '下午好';
   return '晚上好';
+});
+
+// 统计卡：按数据权限视图切换团队/个人口径
+const cards = computed(() => {
+  if (stats.value.scopeType === 'team') {
+    return [
+      { label: '团队日志', display: String(stats.value.total), icon: Document, color: 'blue' },
+      { label: '今日已填', display: stats.value.todayUsers + ' 人', icon: Calendar, color: 'green' },
+      { label: '活跃成员', display: stats.value.activeUsers + ' 人', icon: User, color: 'orange' },
+      { label: '管辖项目', display: String(projects.value.length), icon: Folder, color: 'purple' },
+    ];
+  }
+  return [
+    { label: '我的日志', display: String(stats.value.total), icon: Document, color: 'blue' },
+    { label: '今日得分', display: stats.value.todayScore != null ? stats.value.todayScore + ' 分' : '未填', icon: Calendar, color: 'green' },
+    { label: '我的平均分', display: stats.value.avgScore != null ? stats.value.avgScore + ' 分' : '未评', icon: User, color: 'orange' },
+    { label: '参与项目', display: String(projects.value.length), icon: Folder, color: 'purple' },
+  ];
+});
+
+// 本周填写进度百分比（上限 100）
+const weekPercent = computed(() => {
+  const { filled, total } = stats.value.weekProgress;
+  if (total <= 0) return 0;
+  return Math.min(100, Math.round((filled / total) * 100));
+});
+
+// 近 7 日趋势：补全缺失日期为 0，按最大值归一化柱高
+function localDateStr(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+const trend7dFull = computed(() => {
+  const map = new Map<string, number>();
+  for (const t of stats.value.trend7d) map.set((t.date || '').slice(0, 10), t.cnt);
+  const days: { date: string; label: string; isToday: boolean; cnt: number; height: number }[] = [];
+  const today = new Date();
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const key = localDateStr(d);
+    days.push({
+      date: key,
+      label: i === 0 ? '今天' : `${d.getMonth() + 1}/${d.getDate()}`,
+      isToday: i === 0,
+      cnt: map.get(key) || 0,
+      height: 0,
+    });
+  }
+  const max = Math.max(...days.map((x) => x.cnt), 1);
+  days.forEach((x) => (x.height = Math.round((x.cnt / max) * 80)));
+  return days;
 });
 
 function barWidth(cnt: number) {
@@ -215,13 +296,74 @@ onMounted(async () => {
   box-shadow: 0 4px 14px rgba(64, 158, 255, 0.4);
 }
 
-@media (max-width: 768px) {
-  .hero-banner {
-    padding: 16px;
-  }
-  .hero-greeting {
-    font-size: 17px;
-  }
+/* 本周填写进度 */
+.week-card {
+  margin-bottom: 16px;
+  border-left: 4px solid var(--primary-color, #409eff);
+}
+
+.week-card :deep(.el-card__body) {
+  padding: 16px 20px;
+}
+
+.week-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.week-head-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.week-icon {
+  color: var(--primary-color, #409eff);
+  font-size: 18px;
+}
+
+.week-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.week-count {
+  font-size: 14px;
+  color: var(--text-regular);
+}
+
+.week-count em {
+  font-style: normal;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--primary-color, #409eff);
+}
+
+.week-progress {
+  margin-bottom: 10px;
+}
+
+.week-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.week-tip {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.week-tip strong {
+  color: var(--danger-color, #f56c6c);
+}
+
+.week-tip--done {
+  color: var(--success-color, #67c23a);
 }
 
 /* 统计卡片 */
@@ -260,10 +402,11 @@ onMounted(async () => {
 .stat-card--purple .stat-icon { background: linear-gradient(135deg, #9b59e6, #7d3bc4); box-shadow: 0 4px 12px rgba(155, 89, 230, 0.3); }
 
 .stat-value {
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1.2;
+  white-space: nowrap;
 }
 
 .stat-label {
@@ -336,6 +479,63 @@ onMounted(async () => {
   color: var(--primary-color);
 }
 
+/* 近 7 日趋势图 */
+.trend-card {
+  margin-bottom: 16px;
+}
+
+.trend-chart {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 4px 0;
+  height: 150px;
+}
+
+.trend-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+}
+
+.trend-val {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-regular);
+  height: 18px;
+}
+
+.trend-bar-track {
+  flex: 1;
+  width: 100%;
+  max-width: 36px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.trend-bar {
+  width: 100%;
+  border-radius: 6px 6px 0 0;
+  background: linear-gradient(180deg, #79bbff, #409eff);
+  transition: height 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow: 0 2px 6px rgba(64, 158, 255, 0.25);
+}
+
+.trend-date {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+}
+
+.trend-today {
+  color: var(--primary-color, #409eff);
+  font-weight: 600;
+}
+
 /* 项目分布 */
 .dist-card {
   margin-top: 4px;
@@ -378,12 +578,6 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
-@media (max-width: 768px) {
-  .bar-label {
-    width: 90px;
-  }
-}
-
 .bar-track {
   flex: 1;
   height: 16px;
@@ -407,5 +601,20 @@ onMounted(async () => {
   color: var(--text-regular);
   flex-shrink: 0;
   text-align: right;
+}
+
+@media (max-width: 768px) {
+  .hero-banner {
+    padding: 16px;
+  }
+  .hero-greeting {
+    font-size: 17px;
+  }
+  .bar-label {
+    width: 90px;
+  }
+  .trend-chart {
+    gap: 4px;
+  }
 }
 </style>

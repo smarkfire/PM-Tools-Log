@@ -747,12 +747,81 @@ export async function logStats(req: Request, res: Response) {
     params
   );
 
+  // 平均质检分（忽略未评分的空值，四舍五入取整）
+  const avgScore = await queryOne<{ avg: number | null }>(
+    `SELECT ROUND(AVG(wl.ai_score))::int AS avg FROM work_logs wl ${whereClause}`,
+    params
+  );
+
+  // 近 7 日填写趋势（按数据权限范围）
+  const trendWhere = whereClause
+    ? `${whereClause} AND wl.log_date >= CURRENT_DATE - INTERVAL '6 days'`
+    : `WHERE wl.log_date >= CURRENT_DATE - INTERVAL '6 days'`;
+  const trend7d = await queryMany(
+    `SELECT wl.log_date::text AS date, COUNT(*)::int AS cnt
+     FROM work_logs wl ${trendWhere}
+     GROUP BY wl.log_date ORDER BY wl.log_date`,
+    params
+  );
+
+  // 本人本周填写进度（行动导向，不随数据权限范围变化——管理者自己也要填日志）
+  const weekFilled = await queryOne<{ cnt: number }>(
+    `SELECT COUNT(DISTINCT wl.log_date)::int AS cnt FROM work_logs wl
+     WHERE wl.user_id = $1 AND wl.log_date >= date_trunc('week', CURRENT_DATE)::date AND wl.log_date <= CURRENT_DATE`,
+    [currentUserId]
+  );
+
+  // 本人今日得分（个人视图）
+  const todayScore = await queryOne<{ score: number | null }>(
+    `SELECT wl.ai_score AS score FROM work_logs wl
+     WHERE wl.user_id = $1 AND wl.log_date = CURRENT_DATE ORDER BY wl.id DESC LIMIT 1`,
+    [currentUserId]
+  );
+
+  // 今日已填人数（团队视图）
+  const todayUsers = await queryOne<{ cnt: number }>(
+    `SELECT COUNT(DISTINCT wl.user_id)::int AS cnt FROM work_logs wl ${whereClause ? whereClause + ' AND' : 'WHERE'} wl.log_date = CURRENT_DATE`,
+    params
+  );
+
   res.json(
     success({
+      // 视图类型：管理员/项目经理/小组长看团队，普通成员看个人
+      scopeType: scope.type === 'self' ? 'self' : 'team',
       total: total?.cnt || 0,
       today: today?.cnt || 0,
       activeUsers: activeUsers?.cnt || 0,
+      avgScore: avgScore?.avg ?? null,
+      todayScore: todayScore?.score ?? null,
+      todayUsers: todayUsers?.cnt || 0,
+      weekProgress: {
+        filled: weekFilled?.cnt || 0,
+        total: weekdayFillTarget(),
+      },
+      trend7d,
       byProject,
     })
   );
+}
+
+/** 本周应填日志的目标天数（周一到今天/周五之间的工作日数，周末记为 5） */
+function weekdayFillTarget(): number {
+  const now = new Date();
+  const day = now.getDay(); // 0=周日 6=周六
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + (day === 0 ? -6 : 1 - day));
+  monday.setHours(0, 0, 0, 0);
+  const friday = new Date(monday);
+  friday.setDate(monday.getDate() + 4);
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  const end = today < friday ? today : friday;
+  let total = 0;
+  const cur = new Date(monday);
+  while (cur <= end) {
+    const d = cur.getDay();
+    if (d !== 0 && d !== 6) total++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return Math.max(total, 1);
 }
