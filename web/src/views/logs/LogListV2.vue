@@ -80,6 +80,12 @@
             </el-tag>
             <span class="card-time">{{ formatDateTime(log.created_at) }}</span>
           </div>
+          <div v-if="isMine(log)" class="card-actions" @click.stop>
+            <el-button v-if="canDirectEdit(log)" link type="primary" size="small" @click="handleEdit(log)">编辑</el-button>
+            <el-button v-else-if="log.edit_approval_status === 'pending'" link type="info" size="small" disabled>审批中</el-button>
+            <el-button v-else link type="warning" size="small" @click="handleApplyEdit(log)">申请编辑</el-button>
+            <el-button v-if="isInCurrentWeek(log.log_date)" link type="danger" size="small" @click="handleDelete(log)">删除</el-button>
+          </div>
         </div>
         <el-empty
           v-if="!loading && logs.length === 0"
@@ -125,9 +131,39 @@
               <span class="log-datetime">{{ formatDateTime(row.created_at) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="70" fixed="right">
+          <el-table-column label="操作" width="170" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" size="small" @click="viewLog(row)">查看</el-button>
+              <el-button
+                v-if="isMine(row) && canDirectEdit(row)"
+                link
+                type="primary"
+                size="small"
+                @click="handleEdit(row)"
+              >
+                编辑
+              </el-button>
+              <el-button
+                v-else-if="isMine(row) && row.edit_approval_status === 'pending'"
+                link
+                type="info"
+                size="small"
+                disabled
+              >
+                审批中
+              </el-button>
+              <el-button v-else-if="isMine(row)" link type="warning" size="small" @click="handleApplyEdit(row)">
+                申请编辑
+              </el-button>
+              <el-button
+                v-if="isMine(row) && isInCurrentWeek(row.log_date)"
+                link
+                type="danger"
+                size="small"
+                @click="handleDelete(row)"
+              >
+                删除
+              </el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -180,19 +216,68 @@
           </el-descriptions-item>
         </el-descriptions>
 
-        <div class="section-title">日志内容</div>
-        <div class="log-content">
+        <div class="section-title-row">
+          <div class="section-title">日志内容</div>
+          <el-radio-group v-if="isMine(currentLog) && canDirectEdit(currentLog)" v-model="detailMode" size="small">
+            <el-radio-button value="preview">预览</el-radio-button>
+            <el-radio-button value="edit">编辑</el-radio-button>
+          </el-radio-group>
+        </div>
+        <div v-if="detailMode === 'preview'" class="log-content">
           <MdPreview :content="logText(currentLog)" />
         </div>
+        <template v-else>
+          <el-input
+            v-model="editForm.content"
+            type="textarea"
+            :rows="14"
+            class="edit-textarea"
+            placeholder="请修改日志内容（保持标准模板结构）"
+          />
+          <el-button type="primary" :loading="editSaving" style="width: 100%; margin-top: 10px" @click="saveEdited">
+            <el-icon><Check /></el-icon>保存修改
+          </el-button>
+        </template>
 
-        <el-collapse v-if="currentLog.content && currentLog.content !== logText(currentLog)" class="origin-collapse">
+        <el-collapse
+          v-if="detailMode === 'preview' && currentLog.content && currentLog.content !== logText(currentLog)"
+          class="origin-collapse"
+        >
           <el-collapse-item :title="`原始记录（待办执行情况）`" name="origin">
             <div class="log-content original">{{ currentLog.content }}</div>
           </el-collapse-item>
         </el-collapse>
       </template>
       <template #footer>
+        <el-button
+          v-if="isMine(currentLog) && canDirectEdit(currentLog)"
+          type="primary"
+          @click="detailMode = 'edit'"
+        >
+          编辑此日志
+        </el-button>
+        <el-button v-else-if="isMine(currentLog) && currentLog.edit_approval_status === 'pending'" disabled>
+          修改申请审批中
+        </el-button>
+        <el-button v-else-if="isMine(currentLog)" type="warning" @click="handleApplyEdit(currentLog)">
+          申请编辑
+        </el-button>
         <el-button @click="detailVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 跨周修改申请弹窗 -->
+    <el-dialog v-model="applyVisible" title="申请修改已过期的日志" :width="isMobile ? '92%' : '480px'">
+      <el-alert
+        title="本周过后修改需经上级领导审批。请填写修改原因提交申请，审批通过后即可修改（仅可修改一次）。"
+        type="info"
+        :closable="false"
+        style="margin-bottom: 12px"
+      />
+      <el-input v-model="applyForm.reason" type="textarea" :rows="3" placeholder="请填写修改原因" />
+      <template #footer>
+        <el-button @click="applyVisible = false">取消</el-button>
+        <el-button type="primary" :loading="applySubmitting" @click="submitApply">提交申请</el-button>
       </template>
     </el-dialog>
   </div>
@@ -200,10 +285,11 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { logApi } from '../../api';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { approvalApi, logApi } from '../../api';
 import { useUserStore } from '../../stores/user';
 import { useAppStore } from '../../stores/app';
-import { formatDateTime } from '../../utils/date';
+import { formatDateTime, isInCurrentWeek } from '../../utils/date';
 import MdPreview from '../../components/MdPreview.vue';
 import type { WorkLog } from '../../types';
 
@@ -301,7 +387,108 @@ async function loadLogs() {
 
 function viewLog(log: WorkLog) {
   currentLog.value = log;
+  detailMode.value = 'preview';
+  editForm.content = logText(log);
   detailVisible.value = true;
+}
+
+// ==================== 编辑 / 跨周审批 / 删除（与旧版我的日志一致） ====================
+const detailMode = ref<'preview' | 'edit'>('preview');
+const editForm = reactive({ content: '' });
+const editSaving = ref(false);
+const applyVisible = ref(false);
+const applySubmitting = ref(false);
+const applyForm = reactive({ reason: '' });
+const applyTarget = ref<WorkLog | null>(null);
+
+function isMine(log: WorkLog): boolean {
+  return log.user_id === userStore.user?.id;
+}
+
+/**
+ * 是否可直接编辑：
+ * 总监/系统管理员任意编辑；本周内（周一至周日）的日志直接编辑；
+ * 跨周日志需有审批通过的修改申请（通过后仅可修改一次，保存后失效）
+ */
+function canDirectEdit(log: WorkLog): boolean {
+  if (userStore.isDirector) return true;
+  if (isInCurrentWeek(log.log_date)) return true;
+  return log.edit_approval_status === 'approved';
+}
+
+/** 编辑：打开详情弹窗并进入编辑模式 */
+function handleEdit(log: WorkLog) {
+  viewLog(log);
+  detailMode.value = 'edit';
+}
+
+/** 申请修改跨周日志（已有待审批申请时提示，避免重复提交） */
+function handleApplyEdit(log: WorkLog) {
+  if (!isMine(log)) return;
+  if (log.edit_approval_status === 'pending') {
+    ElMessage.info('该日志已有待审批的修改申请，请等待审批结果');
+    return;
+  }
+  applyTarget.value = log;
+  applyForm.reason = '';
+  detailVisible.value = false;
+  applyVisible.value = true;
+}
+
+async function submitApply() {
+  if (!applyForm.reason.trim()) {
+    ElMessage.warning('请填写修改原因');
+    return;
+  }
+  applySubmitting.value = true;
+  try {
+    await approvalApi.create({
+      targetType: 'log',
+      targetId: applyTarget.value!.id,
+      reason: applyForm.reason.trim(),
+    });
+    ElMessage.success('申请已提交，等待上级审批');
+    applyVisible.value = false;
+  } finally {
+    applySubmitting.value = false;
+  }
+}
+
+/** 保存编辑：同一人同一天一条，后端按日期 UPDATE；保留原质检得分与来源标识 */
+async function saveEdited() {
+  const log = currentLog.value;
+  if (!log) return;
+  if (!editForm.content.trim()) {
+    ElMessage.warning('日志内容不能为空');
+    return;
+  }
+  editSaving.value = true;
+  try {
+    await logApi.save({
+      logDate: String(log.log_date).slice(0, 10),
+      projectId: null,
+      content: log.content,
+      optimizedContent: editForm.content.trim(),
+      aiProvider: log.ai_provider || undefined,
+      hours: log.hours ?? undefined,
+      source: 'v2',
+      aiScore: log.ai_score ?? undefined,
+    });
+    ElMessage.success('修改已保存');
+    detailVisible.value = false;
+    loadLogs();
+  } catch (e: any) {
+    ElMessage.error('保存失败：' + (e?.response?.data?.message || e?.message || '网络异常'));
+  } finally {
+    editSaving.value = false;
+  }
+}
+
+async function handleDelete(log: WorkLog) {
+  await ElMessageBox.confirm('确定要删除这条日志吗？', '提示', { type: 'warning' });
+  await logApi.remove(log.id);
+  ElMessage.success('删除成功');
+  loadLogs();
 }
 
 onMounted(loadLogs);
@@ -468,6 +655,33 @@ onMounted(loadLogs);
 /* ==================== 详情 ==================== */
 .detail-desc {
   margin-bottom: 16px;
+}
+
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 14px 0 8px;
+}
+
+.section-title-row .section-title {
+  margin: 0;
+}
+
+.edit-textarea :deep(textarea) {
+  font-family: inherit;
+  line-height: 1.6;
+}
+
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-top: 1px dashed var(--border-lighter, #ebeef5);
+  padding-top: 6px;
+  margin-top: -2px;
+  min-height: 24px;
 }
 
 .section-title {

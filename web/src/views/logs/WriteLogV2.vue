@@ -127,9 +127,6 @@
                 >
                   <el-icon><MagicStick /></el-icon>自动生成日志
                 </el-button>
-                <el-button size="small" @click="openMyLogs">
-                  <el-icon><Document /></el-icon>我的日志
-                </el-button>
               </div>
             </div>
           </template>
@@ -192,7 +189,43 @@
               <div class="qa-title">质量检查发现以下信息需要补充：</div>
               <div v-for="(q, qi) in pendingQuestions" :key="qi" class="qa-item">
                 <div class="qa-question">{{ qi + 1 }}. {{ q.question }}</div>
-                <template v-if="q.options && q.options.length">
+
+                <!-- 项目：从参与的项目中选择（可多选） -->
+                <el-select
+                  v-if="q.field === 'project'"
+                  v-model="qaAnswers[qi].multi"
+                  multiple
+                  filterable
+                  placeholder="请选择项目（可多选）"
+                  style="width: 100%"
+                >
+                  <el-option v-for="name in myProjectNames" :key="name" :label="name" :value="name" />
+                </el-select>
+
+                <!-- 小组：从参与的小组中选择（可多选） -->
+                <el-select
+                  v-else-if="q.field === 'group'"
+                  v-model="qaAnswers[qi].multi"
+                  multiple
+                  filterable
+                  placeholder="请选择小组（可多选）"
+                  style="width: 100%"
+                >
+                  <el-option v-for="name in myGroupNames" :key="name" :label="name" :value="name" />
+                </el-select>
+
+                <!-- 工时：数字控件 -->
+                <el-input-number
+                  v-else-if="q.field === 'hours'"
+                  v-model="qaAnswers[qi].number"
+                  :min="0"
+                  :max="24"
+                  :step="0.5"
+                  :precision="1"
+                  style="width: 100%"
+                />
+
+                <template v-else-if="q.options && q.options.length">
                   <el-radio-group v-model="qaAnswers[qi].choice" class="qa-options">
                     <el-radio v-for="opt in q.options" :key="opt" :value="opt">{{ opt }}</el-radio>
                     <el-radio value="__other__">其他（自行填写）</el-radio>
@@ -200,11 +233,21 @@
                   <el-input
                     v-if="qaAnswers[qi].choice === '__other__'"
                     v-model="qaAnswers[qi].other"
+                    type="textarea"
+                    :rows="2"
                     placeholder="请输入其他内容"
                     style="margin-top: 6px"
                   />
                 </template>
-                <el-input v-else v-model="qaAnswers[qi].choice" placeholder="请输入你的回答" />
+
+                <!-- 自由回答：多行文本输入 -->
+                <el-input
+                  v-else
+                  v-model="qaAnswers[qi].choice"
+                  type="textarea"
+                  :rows="3"
+                  placeholder="请输入你的回答（可多行详细描述）"
+                />
               </div>
               <el-button type="primary" size="small" :loading="assisting" @click="submitAnswers">
                 提交回答
@@ -271,34 +314,6 @@
         </el-button>
       </template>
     </el-dialog>
-
-    <!-- 我的日志（最近 5 条，内容可折叠） -->
-    <el-drawer v-model="logsDrawerVisible" title="我的日志（最近 5 条）" size="480px">
-      <div v-if="recentLogs.length" class="recent-logs">
-        <el-collapse>
-          <el-collapse-item v-for="log in recentLogs" :key="log.id">
-            <template #title>
-              <div class="recent-log-title">
-                {{ (log.log_date || '').slice(0, 10) }} 的日志
-                <el-tag
-                  v-if="log.optimized_content"
-                  size="small"
-                  type="success"
-                  style="margin-left: 8px"
-                >已优化</el-tag>
-              </div>
-            </template>
-            <MdPreview :content="log.optimized_content || log.content || ''" />
-          </el-collapse-item>
-        </el-collapse>
-      </div>
-      <el-empty v-else description="还没有写过日志" :image-size="70" />
-      <div class="drawer-footer">
-        <el-button type="primary" plain size="small" @click="router.push('/logs')">
-          查看全部日志
-        </el-button>
-      </div>
-    </el-drawer>
   </div>
 </template>
 
@@ -306,10 +321,9 @@
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { chatApi, logApi, todoApi, type TodoItem } from '../../api';
+import { chatApi, logApi, projectApi, todoApi, type TodoItem } from '../../api';
 import { currentWeekMonday } from '../../utils/date';
 import MdPreview from '../../components/MdPreview.vue';
-import type { WorkLog } from '../../types';
 
 const router = useRouter();
 
@@ -355,7 +369,8 @@ const history = ref<{ role: 'user' | 'assistant'; content: string }[]>([]);
 const draftInput = ref('');
 const inputFocused = ref(false);
 const pendingQuestions = ref<any[]>([]);
-const qaAnswers = ref<Record<number, { choice: string; other: string }>>({});
+/** 问答答案：multi 用于项目/小组多选，number 用于工时，choice/other 用于选项与自由输入 */
+const qaAnswers = ref<Record<number, { choice: string; other: string; multi: string[]; number: number | null }>>({});
 
 // 过滤 AI 自带的"其他/自行填写"类兜底选项，避免与前端固定的自由填写入口重复
 function filterOtherOptions(questions: any[] | undefined): any[] {
@@ -373,14 +388,16 @@ const chatBodyEl = ref<HTMLElement | null>(null);
 // 当前最新的日志优化稿（供保存使用；与对话消息内卡片同一引用）
 const result = ref<AssistResult | null>(null);
 
-// 我的日志抽屉
-const logsDrawerVisible = ref(false);
-const recentLogs = ref<WorkLog[]>([]);
+// 质检问答的下拉候选：我参与的项目与小组（与项目管理数据一致，避免填写错误）
+const myProjectOptions = ref<{ name: string; groups: string[] }[]>([]);
+const myProjectNames = computed(() => myProjectOptions.value.map((p) => p.name));
+const myGroupNames = computed(() => [...new Set(myProjectOptions.value.flatMap((p) => p.groups))]);
 
 onMounted(async () => {
-  const [providerRes, todoRes] = await Promise.all([
+  const [providerRes, todoRes, projectRes] = await Promise.all([
     chatApi.providers().catch(() => null),
     todoApi.list(logDate.value).catch(() => null),
+    projectApi.list().catch(() => null),
   ]);
   if (providerRes) {
     providers.qwenConfigured = providerRes.data.qwenConfigured;
@@ -388,6 +405,13 @@ onMounted(async () => {
     if (!providers.qwenConfigured && providers.deepseekConfigured) provider.value = 'deepseek';
   }
   todos.value = todoRes?.data || [];
+  // 质检问答项目/小组下拉候选：与项目管理数据保持一致
+  if (projectRes) {
+    myProjectOptions.value = (projectRes.data || []).map((p) => ({
+      name: p.name,
+      groups: (p.groups || []).map((g) => g.name),
+    }));
+  }
 });
 
 watch(logDate, () => {
@@ -511,8 +535,9 @@ async function runAssist() {
     } else if (data) {
       pendingQuestions.value = filterOtherOptions(data.questions);
       qaAnswers.value = {};
-      pendingQuestions.value.forEach((_q, i) => {
-        qaAnswers.value[i] = { choice: '', other: '' };
+      pendingQuestions.value.forEach((q: any, i: number) => {
+        // 按题型初始化答案容器（项目/小组多选、工时数字、其余文本）
+        qaAnswers.value[i] = { choice: '', other: '', multi: [], number: 8 };
       });
       msg.text =
         `🔍 质量检查${data.score != null ? `：${data.score} 分，未达到 80 分` : ''}\n\n${data.summary || ''}\n\n` +
@@ -542,13 +567,28 @@ async function scrollChat() {
 }
 
 async function submitAnswers() {
-  const ansText = pendingQuestions.value
-    .map((_q, i) => {
-      const a = qaAnswers.value[i] || { choice: '', other: '' };
-      if (a.choice === '__other__') return `${i + 1}. 其他：${a.other || '（未填写）'}`;
-      return `${i + 1}. ${a.choice || a.other || '（未回答）'}`;
-    })
-    .join('\n');
+  // 组装各题答案：项目/小组取多选、工时取数字，其余取选项或自由输入
+  const answers = pendingQuestions.value.map((q: any, i: number) => {
+    const a =
+      qaAnswers.value[i] || { choice: '', other: '', multi: [] as string[], number: null as number | null };
+    let answer: string;
+    if (q.field === 'project' || q.field === 'group') {
+      answer = a.multi.join('、');
+    } else if (q.field === 'hours') {
+      answer = a.number != null ? `${a.number} 小时` : '';
+    } else if (a.choice === '__other__') {
+      answer = a.other;
+    } else {
+      answer = a.choice;
+    }
+    return { idx: i + 1, answer: answer.trim() };
+  });
+  const missing = answers.filter((x) => !x.answer);
+  if (missing.length) {
+    ElMessage.warning(`第 ${missing.map((x) => x.idx).join('、')} 题还未作答，请补充后再提交`);
+    return;
+  }
+  const ansText = answers.map((x) => `${x.idx}. ${x.answer}`).join('\n');
   messages.value.push({ role: 'user', text: '我的回答：\n' + ansText });
   history.value.push({ role: 'user', content: '我的回答：\n' + ansText });
   pendingQuestions.value = [];
@@ -562,16 +602,6 @@ async function sendDraft() {
   messages.value.push({ role: 'user', text: d });
   history.value.push({ role: 'user', content: '补充说明：' + d });
   runAssist();
-}
-
-async function openMyLogs() {
-  try {
-    const res = await logApi.list({ page: 1, pageSize: 5 });
-    recentLogs.value = (res.data as any)?.list || [];
-  } catch {
-    recentLogs.value = [];
-  }
-  logsDrawerVisible.value = true;
 }
 
 async function saveLog() {
@@ -643,7 +673,8 @@ async function doSave() {
       aiProvider: provider.value,
       hours: result.value!.hours ?? undefined,
       source: 'v2',
-      aiScore: result.value!.score ?? undefined,
+      // 保存进日志表的分数以保存前二次质检为准
+      aiScore: reviewResult.value?.score ?? result.value?.score ?? undefined,
     });
     ElMessage.success('日志保存成功');
     reviewVisible.value = false;

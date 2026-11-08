@@ -559,8 +559,10 @@ export async function reviewLog(req: Request, res: Response) {
     {
       role: 'user',
       content: [
-        '【任务模式：保存前二次质检】这次不要生成、也不要改写日志，只对下面这篇已确认的日志终稿做一次严格的质量复检。',
-        '按系统提示词中的《好日志规范》与评分标准重新打分，并给出具体、可执行的修改建议（完全达标则给出通过结论）。',
+        '【任务模式：保存前二次质检】这次不要生成、也不要改写日志，只对下面这篇已确认的日志终稿做一次质量复检。',
+        '按系统提示词中的《好日志规范》与评分标准打分：先在思考中逐项计算（结构层级 X/10、投入时长 X/10、明日计划 X/10、问题风险 X/10、事项质量 X/60），score 为各项之和。',
+        '重要：同一篇日志只要内容相同，无论评多少次都必须得到相同分数——检查与打分尺度与生成日志时的质检完全一致，不要因为"复检"而额外从严。',
+        '然后给出具体、可执行的修改建议（完全达标则给出通过结论）。',
         '思考过程后，用一行 ===JSON=== 分隔，输出 JSON：',
         '{"score":分数,"summary":"一句话总评","suggestions":["建议1","建议2"]}',
         '要求：score 为 0~100 整数；suggestions 每条具体到条目与改法（引用原文说明改哪里、怎么改），最多 5 条，完全达标可为空数组；不要输出日志改写稿。',
@@ -574,7 +576,7 @@ export async function reviewLog(req: Request, res: Response) {
 
   try {
     const full = await chat(aiProvider, messages, {
-      temperature: 0.2,
+      temperature: 0, // 复检要求确定性：同一篇日志多次评分应得到相同分数
       override: aiProvider === 'qwen' ? userAiConfig.qwen : userAiConfig.deepseek,
     });
     const SEP = '===JSON===';
