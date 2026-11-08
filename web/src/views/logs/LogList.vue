@@ -91,6 +91,19 @@
         <el-table-column prop="log_date" label="日志日期" width="110">
           <template #default="{ row }">{{ formatDateOnly(row.log_date) }}</template>
         </el-table-column>
+        <el-table-column label="得分" width="90">
+          <template #default="{ row }">
+            <el-tag
+              v-if="row.ai_score != null"
+              size="small"
+              :type="row.ai_score >= 80 ? 'success' : row.ai_score >= 60 ? 'warning' : 'danger'"
+              effect="dark"
+            >
+              {{ row.ai_score }}分
+            </el-tag>
+            <span v-else class="text-muted">-</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="user_name" label="成员" width="100" v-if="isTeam" />
         <el-table-column prop="project_name" label="项目" width="140">
           <template #default="{ row }">

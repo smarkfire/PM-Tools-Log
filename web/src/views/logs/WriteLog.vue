@@ -459,7 +459,7 @@ async function handleOptimize() {
       .map((gid) => projectGroups.value.find((g) => g.id === gid)?.name || '')
       .filter(Boolean);
     const ctx = [
-      `姓名：${userStore.user?.display_name || userStore.user?.username || '（待补充）'}`,
+      `姓名：${userStore.user?.displayName || userStore.user?.username || '（待补充）'}`,
       `日期：${form.logDate}`,
       form.projectId ? `项目名称：${proj?.name || '（待补充）'}` : '',
       groupNames.length ? `小组名称：${groupNames.join('、')}` : '',
