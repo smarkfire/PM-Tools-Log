@@ -239,6 +239,25 @@
       </template>
     </el-dialog>
 
+    <!-- 生成中的动画提示框 -->
+    <el-dialog
+      v-model="genLoadingVisible"
+      title="AI 生成报告"
+      width="min(92vw, 420px)"
+      top="30vh"
+      :show-close="false"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+    >
+      <div class="review-loading">
+        <el-icon class="review-spin"><Loading /></el-icon>
+        <div class="review-loading-text">
+          <div class="review-loading-title">AI 正在生成{{ typeLabel }}…</div>
+          <div class="review-loading-step">{{ genStep }}</div>
+        </div>
+      </div>
+    </el-dialog>
+
     <!-- 报告详情对话框 -->
     <el-dialog v-model="detailVisible" title="报告详情" :width="isMobile ? '94%' : '760px'" top="4vh">
       <template v-if="currentReport">
@@ -345,6 +364,34 @@ const providers = reactive({ qwenConfigured: false, deepseekConfigured: false })
 
 const generateVisible = ref(false);
 const generating = ref(false);
+const genLoadingVisible = ref(false);
+
+// 生成动作提示：轮换展示当前正在做的步骤
+const GEN_STEPS = [
+  '正在汇总周期内的日志数据…',
+  '正在读取项目与小组信息…',
+  'AI 正在撰写报告章节…',
+  '正在润色排版并生成结论…',
+];
+const genStep = ref(GEN_STEPS[0]);
+let genStepTimer: number | undefined;
+
+function startGenSteps() {
+  stopGenSteps();
+  let i = 0;
+  genStep.value = GEN_STEPS[0];
+  genStepTimer = window.setInterval(() => {
+    i = Math.min(i + 1, GEN_STEPS.length - 1);
+    genStep.value = GEN_STEPS[i];
+  }, 2600);
+}
+
+function stopGenSteps() {
+  if (genStepTimer) {
+    clearInterval(genStepTimer);
+    genStepTimer = undefined;
+  }
+}
 const reportType = ref<'weekly' | 'monthly'>('weekly');
 const generateForm = reactive({
   scope: 'personal' as 'personal' | 'project',
@@ -511,6 +558,8 @@ async function handleGenerate() {
     endDate = generateForm.customRange[1];
   }
   generating.value = true;
+  genLoadingVisible.value = true;
+  startGenSteps();
   try {
     const res = await reportApi.generate({
       type: reportType.value,
@@ -527,11 +576,14 @@ async function handleGenerate() {
     });
     ElMessage.success('报告生成成功');
     generateVisible.value = false;
+    genLoadingVisible.value = false;
     currentReport.value = res.data;
     detailVisible.value = true;
     loadReports();
   } finally {
     generating.value = false;
+    stopGenSteps();
+    genLoadingVisible.value = false;
   }
 }
 
@@ -690,5 +742,56 @@ onMounted(async () => {
   font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.5;
+}
+
+/* 生成中的动画提示（与日志质检加载一致） */
+.review-loading {
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 10px 0;
+}
+
+.review-spin {
+  font-size: 38px;
+  color: var(--primary-color, #409eff);
+  animation: report-rotate 1s linear infinite;
+}
+
+@keyframes report-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.review-loading-text {
+  text-align: center;
+}
+
+.review-loading-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.review-loading-step {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  animation: report-step-fade 0.5s ease;
+}
+
+@keyframes report-step-fade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>
