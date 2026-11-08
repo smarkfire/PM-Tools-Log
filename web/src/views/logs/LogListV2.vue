@@ -280,6 +280,37 @@
         <el-button type="primary" :loading="applySubmitting" @click="submitApply">提交申请</el-button>
       </template>
     </el-dialog>
+
+    <!-- 保存修改前二次质检：展示分数与修改建议，确认保存或返回修改 -->
+    <el-dialog v-model="reviewVisible" title="保存前质量检查" :width="isMobile ? '92%' : '520px'" top="8vh">
+      <div v-if="!reviewResult" v-loading="reviewing" class="review-loading">AI 正在复检日志，请稍候…</div>
+      <template v-else>
+        <div class="review-head">
+          <span class="review-score" :class="scoreClass(reviewResult.score)">
+            {{ reviewResult.score != null ? reviewResult.score + ' 分' : '未评分' }}
+          </span>
+          <span v-if="reviewResult.score != null" class="review-pass">
+            {{ reviewResult.score >= 80 ? '已达到 80 分保存标准' : '未达到 80 分标准，建议返回修改' }}
+          </span>
+        </div>
+        <div v-if="reviewResult.summary" class="review-summary">{{ reviewResult.summary }}</div>
+        <template v-if="reviewResult.suggestions.length">
+          <div class="review-sug-title">修改建议：</div>
+          <ul class="review-sug-list">
+            <li v-for="(s, i) in reviewResult.suggestions" :key="i">{{ s }}</li>
+          </ul>
+        </template>
+        <div v-else class="review-sug-title" style="color: var(--el-color-success)">
+          AI 未发现需要修改的问题。
+        </div>
+      </template>
+      <template #footer>
+        <el-button @click="reviewVisible = false">返回修改</el-button>
+        <el-button type="success" :loading="editSaving" :disabled="!reviewResult" @click="confirmSaveEdited">
+          <el-icon><Check /></el-icon>确认保存
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -396,6 +427,17 @@ function viewLog(log: WorkLog) {
 const detailMode = ref<'preview' | 'edit'>('preview');
 const editForm = reactive({ content: '' });
 const editSaving = ref(false);
+
+// 保存修改前的二次质检
+interface ReviewResult {
+  score: number | null;
+  summary: string;
+  suggestions: string[];
+}
+const reviewVisible = ref(false);
+const reviewing = ref(false);
+const reviewResult = ref<ReviewResult | null>(null);
+
 const applyVisible = ref(false);
 const applySubmitting = ref(false);
 const applyForm = reactive({ reason: '' });
@@ -454,7 +496,7 @@ async function submitApply() {
   }
 }
 
-/** 保存编辑：同一人同一天一条，后端按日期 UPDATE；保留原质检得分与来源标识 */
+/** 保存修改前先做二次质检：弹窗展示分数与修改建议，由用户决定返回修改或确认保存 */
 async function saveEdited() {
   const log = currentLog.value;
   if (!log) return;
@@ -462,6 +504,37 @@ async function saveEdited() {
     ElMessage.warning('日志内容不能为空');
     return;
   }
+  reviewResult.value = null;
+  reviewVisible.value = true;
+  reviewing.value = true;
+  try {
+    const res = await logApi.review({
+      date: String(log.log_date).slice(0, 10),
+      content: editForm.content.trim(),
+    });
+    reviewResult.value = res.data;
+  } catch (e: any) {
+    reviewVisible.value = false;
+    const msg = e?.response?.data?.message || e?.message || '网络异常';
+    try {
+      await ElMessageBox.confirm(`质量检查失败（${msg}），是否跳过质检直接保存？`, '提示', {
+        type: 'warning',
+        confirmButtonText: '直接保存',
+        cancelButtonText: '取消',
+      });
+      await confirmSaveEdited();
+    } catch {
+      // 用户取消
+    }
+  } finally {
+    reviewing.value = false;
+  }
+}
+
+/** 质检弹窗中确认保存（保存的得分以本次质检分数为准） */
+async function confirmSaveEdited() {
+  const log = currentLog.value;
+  if (!log) return;
   editSaving.value = true;
   try {
     await logApi.save({
@@ -472,9 +545,10 @@ async function saveEdited() {
       aiProvider: log.ai_provider || undefined,
       hours: log.hours ?? undefined,
       source: 'v2',
-      aiScore: log.ai_score ?? undefined,
+      aiScore: reviewResult.value?.score ?? log.ai_score ?? undefined,
     });
     ElMessage.success('修改已保存');
+    reviewVisible.value = false;
     detailVisible.value = false;
     loadLogs();
   } catch (e: any) {
@@ -689,6 +763,61 @@ onMounted(loadLogs);
   padding-top: 6px;
   margin-top: -2px;
   min-height: 24px;
+}
+
+/* ==================== 保存前质检弹窗 ==================== */
+.review-loading {
+  min-height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.review-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.review-score {
+  font-size: 15px;
+  font-weight: 600;
+  padding: 3px 14px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.review-pass {
+  font-size: 13px;
+  color: var(--text-regular);
+}
+
+.review-summary {
+  background: #f8f9fb;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-regular);
+  margin-bottom: 10px;
+}
+
+.review-sug-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 6px 0;
+}
+
+.review-sug-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-regular);
 }
 
 .section-title {
