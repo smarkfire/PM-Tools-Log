@@ -44,6 +44,11 @@ function fmtDay(v: unknown): string {
   return v instanceof Date ? fmt(v) : String(v);
 }
 
+/** 转义正则特殊字符，用于按项目名/小组名精确匹配内容标题 */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /**
  * 按小组组织项目日志上下文（项目报告"按小组分组"模式）
  * 归属规则：日志显式标记（work_log_groups）优先；未标记时回退到作者所属小组（均摊工时）
@@ -103,7 +108,31 @@ export async function buildGroupedLogContext(projectId: number, logRows: any[]):
       l.optimized_content || l.content
     ).replace(/\n/g, '\n  ')}`;
 
+  // v2 日志小组信息在内容三级标题中（"### 小组名称：xxx"，兼容旧格式"### xxx"），名称→id 映射
+  const groupIdByName = new Map(groups.map((g) => [g.name, g.id]));
+
   for (const l of logRows) {
+    // v2（对话式）日志：按内容小组标题归组，工时按涉及组数均摊；标题不匹配任何小组时归入未分组
+    if (l.source === 'v2') {
+      const text = l.optimized_content || l.content;
+      const names = [...text.matchAll(/^###\s*(?:小组名称[:：]\s*)?(.+)$/gm)]
+        .map((m) => m[1].trim())
+        .filter(Boolean);
+      const gids = [...new Set(names.map((n) => groupIdByName.get(n)).filter((v): v is number => v != null))];
+      if (gids.length === 0) {
+        ungroupedLines.push(logLine(l, l.hours == null ? null : num(l.hours), '工时'));
+        ungroupedHours += num(l.hours);
+        continue;
+      }
+      const per = l.hours != null ? Math.round((num(l.hours) / gids.length) * 10) / 10 : null;
+      for (const gid of gids) {
+        const b = buckets.get(gid);
+        if (!b) continue;
+        b.lines.push(logLine(l, per));
+        if (per != null) b.hours += per;
+      }
+      continue;
+    }
     const marks = marksByLog.get(l.id) || [];
     let eff: { group_id: number; hours: number | null }[];
     if (marks.length > 0) {
@@ -146,6 +175,39 @@ export async function buildGroupedLogContext(projectId: number, logRows: any[]):
 }
 
 /**
+ * 按小组过滤项目日志（为单个小组生成报告）
+ * 归属规则：
+ * - v1 日志有显式小组标记（work_log_groups）→ 只看标记，标记为其他小组则排除
+ * - 日志内容含"### 小组名称：xxx"（或旧格式"### xxx"）标题 → 按标题（v2 日志主通道）
+ * - v1 未标记日志 → 回退到作者是否为该小组成员
+ */
+async function filterLogsByGroup(group: { id: number; name: string }, logRows: any[]): Promise<any[]> {
+  const logIds = logRows.map((l) => l.id);
+  const marks = logIds.length
+    ? await queryMany<{ log_id: number; group_id: number }>(
+        'SELECT log_id, group_id FROM work_log_groups WHERE log_id = ANY($1::int[])',
+        [logIds]
+      )
+    : [];
+  const markedLogIds = new Set(marks.map((m) => m.log_id));
+  const groupMarkIds = new Set(marks.filter((m) => m.group_id === group.id).map((m) => m.log_id));
+  const authorIds = [...new Set(logRows.map((l) => l.user_id))];
+  const memberRows = authorIds.length
+    ? await queryMany<{ user_id: number }>(
+        'SELECT user_id FROM project_group_members WHERE group_id = $1 AND user_id = ANY($2::int[])',
+        [group.id, authorIds]
+      )
+    : [];
+  const memberSet = new Set(memberRows.map((m) => m.user_id));
+  const groupRe = new RegExp(`^###\\s*(?:小组名称[:：]\\s*)?${escapeRegExp(group.name)}\\s*$`, 'm');
+  return logRows.filter((l) => {
+    if (markedLogIds.has(l.id)) return groupMarkIds.has(l.id);
+    if (groupRe.test(l.optimized_content || l.content)) return true;
+    return l.source !== 'v2' && memberSet.has(l.user_id);
+  });
+}
+
+/**
  * 生成报告
  * POST /api/reports/generate
  * body: { type: 'weekly'|'monthly', scope: 'personal'|'project', targetUserId?, projectId?,
@@ -154,7 +216,7 @@ export async function buildGroupedLogContext(projectId: number, logRows: any[]):
  */
 export async function generateReport(req: Request, res: Response) {
   const currentUserId = req.authUser!.id;
-  const { type, scope, targetUserId, projectId, date, startDate, endDate, provider, promptId, groupBy } =
+  const { type, scope, targetUserId, projectId, groupId, date, startDate, endDate, provider, promptId, groupBy } =
     req.body || {};
   if (!['weekly', 'monthly'].includes(type) || !['personal', 'project'].includes(scope)) {
     res.status(400).json(fail('无效的报告类型或范围'));
@@ -184,6 +246,8 @@ export async function generateReport(req: Request, res: Response) {
 
   let logRows: any[];
   let titlePrefix = '';
+  /** 项目报告可指定小组（group 报告）：只为该小组生成 */
+  let group: { id: number; name: string } | null = null;
 
   if (scope === 'personal') {
     // 个人报告：目标用户（默认自己）
@@ -214,21 +278,59 @@ export async function generateReport(req: Request, res: Response) {
       res.status(400).json(fail('项目报告必须指定项目'));
       return;
     }
-    if (!(await canManageProject(currentUserId, parseInt(projectId, 10)))) {
+    const pid = parseInt(projectId, 10);
+    if (!(await canManageProject(currentUserId, pid))) {
       res.status(403).json(fail('无权限：仅项目总监或该项目经理可生成项目报告', 403));
       return;
     }
+    const project = await queryOne<{ name: string }>('SELECT name FROM projects WHERE id = $1', [pid]);
+    if (!project) {
+      res.status(400).json(fail('项目不存在'));
+      return;
+    }
+
+    // 可选：为指定小组单独生成报告
+    if (groupId) {
+      group = await queryOne<{ id: number; name: string }>(
+        'SELECT id, name FROM project_groups WHERE id = $1 AND project_id = $2',
+        [parseInt(groupId, 10), pid]
+      );
+      if (!group) {
+        res.status(400).json(fail('小组不存在或不属于该项目'));
+        return;
+      }
+    }
+
+    // 项目成员（圈定 v2 日志候选范围：v2 日志项目信息在内容中，无 project_id）
+    const memberRows = await queryMany<{ user_id: number }>(
+      'SELECT user_id FROM project_members WHERE project_id = $1',
+      [pid]
+    );
+    // v1 日志按 project_id 归属；v2 日志按"成员 + 内容含『## 项目名称：xxx』标题"归属（兼容旧格式）
     logRows = await queryMany(
-      `SELECT wl.id, wl.user_id, wl.log_date, wl.content, wl.optimized_content, wl.hours, p.name AS project_name, u.display_name
+      `SELECT wl.id, wl.user_id, wl.source, wl.log_date, wl.content, wl.optimized_content, wl.hours,
+              p.name AS project_name, u.display_name
        FROM work_logs wl
        JOIN users u ON u.id = wl.user_id
        LEFT JOIN projects p ON p.id = wl.project_id
-       WHERE wl.project_id = $1 AND wl.log_date BETWEEN $2 AND $3
+       WHERE wl.log_date BETWEEN $1 AND $2
+         AND (wl.project_id = $3 OR (wl.source = 'v2' AND wl.user_id = ANY($4::int[])))
        ORDER BY wl.log_date`,
-      [projectId, start, end]
+      [start, end, pid, memberRows.map((m) => m.user_id)]
     );
-    const project = await queryOne<{ name: string }>('SELECT name FROM projects WHERE id = $1', [projectId]);
-    titlePrefix = project ? `${project.name} 项目 ` : '';
+    const projRe = project.name
+      ? new RegExp(`^##\\s*(?:项目名称[:：]\\s*)?${escapeRegExp(project.name)}\\s*$`, 'm')
+      : null;
+    logRows = logRows.filter(
+      (l) => l.project_id === pid || (projRe != null && projRe.test(l.optimized_content || l.content))
+    );
+
+    // 小组报告：只保留涉及该小组的日志
+    if (group) {
+      logRows = await filterLogsByGroup(group, logRows);
+    }
+
+    titlePrefix = `${project.name} 项目${group ? ` · ${group.name} 小组` : ''} `;
   }
 
   if (logRows.length === 0) {
@@ -237,8 +339,8 @@ export async function generateReport(req: Request, res: Response) {
   }
 
   // 组装日志上下文（优先使用优化后内容）
-  // 项目报告支持"按小组分组"模式：按小组分节组织，含各组工时与空组提醒
-  const useGroupBy = scope === 'project' && groupBy === 'group';
+  // 项目报告支持"按小组分组"模式：按小组分节组织，含各组工时与空组提醒（单小组报告不分组）
+  const useGroupBy = scope === 'project' && groupBy === 'group' && !group;
   let logContext: string;
   if (useGroupBy) {
     logContext = await buildGroupedLogContext(parseInt(projectId, 10), logRows);
@@ -261,13 +363,23 @@ export async function generateReport(req: Request, res: Response) {
     ? basePrompt.replace('{REPORT_TYPE}', reportTypeName)
     : basePrompt;
 
+  // 标准日志模板结构说明：v2 日志的项目/小组信息以内容标题为准，AI 按标题归集（不依赖日志表外键）
+  const structureNote =
+    '【日志数据结构说明】日志采用标准 Markdown 模板：一级标题"某人某天的日志"；二级标题"项目名称：xxx"（其下第一行为"投入时长：X小时"），另有"明日计划""问题与风险"两个固定章节；三级标题"小组名称：xxx"，组下逐条为具体工作事项。' +
+    '归集项目、小组与工时时请严格以这些标题为准，项目名、小组名保持日志原文，不得改写、缩写或另起别名；"明日计划""问题与风险"章节的内容不要计入本期已完成工作。\n\n';
+
   const userMessage = useGroupBy
     ? `请生成 ${titlePrefix}${reportTypeName}（周期：${start} 至 ${end}）。\n\n` +
       `报告组织要求：请严格按下方的小组结构组织内容——先给出项目整体概述（总工时、整体进展与成果），` +
       `然后每个小组一节（本组本周工作、进展评估、风险与下周重点，注明各组投入工时），` +
       `最后单独列出"本期无日志的小组"（如有）。日志已按小组归类、工时已按组分配（跨组协作的日志会出现在多个组中）。\n\n` +
-      `各小组工作日志如下：\n\n${logContext}`
-    : `请生成 ${titlePrefix}${reportTypeName}（周期：${start} 至 ${end}）。\n\n${logContext}`;
+      `${structureNote}各小组工作日志如下：\n\n${logContext}`
+    : group
+      ? `请生成 ${titlePrefix}${reportTypeName}（周期：${start} 至 ${end}）。\n\n` +
+        `本报告仅针对「${group.name}」小组：只统计该小组本期的工作（日志中以"### 小组名称：${group.name}"标注的事项即该组工作），` +
+        `报告标题注明小组名称，聚焦该组的工作内容、投入工时、进展与风险，不要编写其他小组的内容。\n\n` +
+        `${structureNote}该小组本期工作日志如下：\n\n${logContext}`
+      : `请生成 ${titlePrefix}${reportTypeName}（周期：${start} 至 ${end}）。\n\n${structureNote}${logContext}`;
 
   // Key 优先级：用户自己的 > 系统配置 > .env
   const userAiConfig = await getUserAiConfig(currentUserId);
@@ -280,16 +392,17 @@ export async function generateReport(req: Request, res: Response) {
     { override: aiProvider === 'qwen' ? userAiConfig.qwen : userAiConfig.deepseek }
   );
 
-  // 保存报告
+  // 保存报告（小组报告记录 group_id，便于列表区分与追溯）
   const report = await queryOne(
-    `INSERT INTO reports (type, scope, user_id, target_user_id, project_id, period_start, period_end, content, ai_provider)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+    `INSERT INTO reports (type, scope, user_id, target_user_id, project_id, group_id, period_start, period_end, content, ai_provider)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
     [
       type,
       scope,
       currentUserId,
       scope === 'personal' ? targetUserId || currentUserId : null,
       scope === 'project' ? projectId : null,
+      group ? group.id : null,
       start,
       end,
       content,
@@ -340,13 +453,15 @@ export async function listReports(req: Request, res: Response) {
     params
   );
   const reports = await queryMany(
-    `SELECT r.id, r.type, r.scope, r.user_id, r.target_user_id, r.project_id,
+    `SELECT r.id, r.type, r.scope, r.user_id, r.target_user_id, r.project_id, r.group_id,
             r.period_start, r.period_end, r.ai_provider, r.created_at,
-            g.display_name AS generator_name, t.display_name AS target_name, p.name AS project_name
+            g.display_name AS generator_name, t.display_name AS target_name, p.name AS project_name,
+            gr.name AS group_name
      FROM reports r
      JOIN users g ON g.id = r.user_id
      LEFT JOIN users t ON t.id = r.target_user_id
      LEFT JOIN projects p ON p.id = r.project_id
+     LEFT JOIN project_groups gr ON gr.id = r.group_id
      ${whereClause}
      ORDER BY r.created_at DESC
      LIMIT ${size} OFFSET ${(pageNum - 1) * size}`,
@@ -364,11 +479,13 @@ export async function getReport(req: Request, res: Response) {
   const currentUserId = req.authUser!.id;
   const reportId = parseInt(req.params.id, 10);
   const report = await queryOne(
-    `SELECT r.*, g.display_name AS generator_name, t.display_name AS target_name, p.name AS project_name
+    `SELECT r.*, g.display_name AS generator_name, t.display_name AS target_name, p.name AS project_name,
+            gr.name AS group_name
      FROM reports r
      JOIN users g ON g.id = r.user_id
      LEFT JOIN users t ON t.id = r.target_user_id
      LEFT JOIN projects p ON p.id = r.project_id
+     LEFT JOIN project_groups gr ON gr.id = r.group_id
      WHERE r.id = $1`,
     [reportId]
   );

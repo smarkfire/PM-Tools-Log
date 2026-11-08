@@ -145,6 +145,8 @@ export interface Report {
   user_id: number;
   target_user_id: number | null;
   project_id: number | null;
+  /** 项目报告指定的小组（按小组生成时非空） */
+  group_id?: number | null;
   period_start: string;
   period_end: string;
   content: string;
@@ -153,4 +155,5 @@ export interface Report {
   generator_name?: string;
   target_name?: string | null;
   project_name?: string | null;
+  group_name?: string | null;
 }

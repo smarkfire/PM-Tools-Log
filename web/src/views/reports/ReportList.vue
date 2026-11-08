@@ -48,7 +48,7 @@
         </el-table-column>
         <el-table-column label="对象" min-width="140">
           <template #default="{ row }">
-            {{ row.scope === 'project' ? row.project_name : (row.target_name || '我') }}
+            {{ row.scope === 'project' ? (row.group_name ? `${row.project_name} · ${row.group_name}` : row.project_name) : (row.target_name || '我') }}
           </template>
         </el-table-column>
         <el-table-column label="周期" width="180">
@@ -86,7 +86,7 @@
             <span class="report-time">{{ formatTime(r.created_at) }}</span>
           </div>
           <div class="report-subject">
-            {{ r.scope === 'project' ? r.project_name : (r.target_name || '我') }}
+            {{ r.scope === 'project' ? (r.group_name ? `${r.project_name} · ${r.group_name}` : r.project_name) : (r.target_name || '我') }}
           </div>
           <div class="report-period">{{ r.period_start }} ~ {{ r.period_end }}</div>
         </div>
@@ -123,6 +123,17 @@
               :label="p.name"
               :value="p.id"
             />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item v-if="generateForm.scope === 'project'" label="选择小组（可选，为该小组单独生成）">
+          <el-select
+            v-model="generateForm.groupId"
+            placeholder="不选则统计整个项目"
+            clearable
+            style="width: 100%"
+          >
+            <el-option v-for="g in currentProjectGroups" :key="g.id" :label="g.name" :value="g.id" />
           </el-select>
         </el-form-item>
 
@@ -175,7 +186,7 @@
           />
         </el-form-item>
 
-        <el-form-item v-if="generateForm.scope === 'project'" label="呈现方式">
+        <el-form-item v-if="generateForm.scope === 'project' && !generateForm.groupId" label="呈现方式">
           <el-radio-group v-model="generateForm.groupBy">
             <el-radio-button value="group">按小组分组</el-radio-button>
             <el-radio-button value="flat">汇总平铺</el-radio-button>
@@ -233,7 +244,7 @@
             {{ currentReport.type === 'weekly' ? '周报' : '月报' }}
           </el-descriptions-item>
           <el-descriptions-item label="范围">
-            {{ currentReport.scope === 'project' ? `项目：${currentReport.project_name}` : `个人：${currentReport.target_name || '我'}` }}
+            {{ currentReport.scope === 'project' ? `项目：${currentReport.project_name}${currentReport.group_name ? ` · ${currentReport.group_name}` : ''}` : `个人：${currentReport.target_name || '我'}` }}
           </el-descriptions-item>
           <el-descriptions-item label="周期">
             {{ currentReport.period_start }} ~ {{ currentReport.period_end }}
@@ -306,7 +317,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { reportApi, projectApi, promptApi, chatApi, approvalApi } from '../../api';
 import { useUserStore } from '../../stores/user';
@@ -335,6 +346,8 @@ const reportType = ref<'weekly' | 'monthly'>('weekly');
 const generateForm = reactive({
   scope: 'personal' as 'personal' | 'project',
   projectId: undefined as number | undefined,
+  /** 项目报告可指定小组（可选），为该小组单独生成 */
+  groupId: undefined as number | undefined,
   targetUserId: undefined as number | undefined,
   periodMode: 'auto' as 'auto' | 'custom',
   date: new Date().toISOString().slice(0, 10),
@@ -356,6 +369,19 @@ const managedProjects = computed(() =>
 );
 
 const canGenerateProject = computed(() => managedProjects.value.length > 0);
+
+// 当前所选项目的小组（项目报告可为单个小组生成）
+const currentProjectGroups = computed(
+  () => managedProjects.value.find((p) => p.id === generateForm.projectId)?.groups || []
+);
+
+// 切换项目时清空已选小组，避免小组与项目不匹配
+watch(
+  () => generateForm.projectId,
+  () => {
+    generateForm.groupId = undefined;
+  }
+);
 
 // 权限范围内成员（可为他人生成个人报告）
 const canGenerateForOthers = computed(() => {
@@ -447,6 +473,7 @@ function showGenerateDialog(type: 'weekly' | 'monthly') {
   reportType.value = type;
   generateForm.scope = 'personal';
   generateForm.projectId = undefined;
+  generateForm.groupId = undefined;
   generateForm.targetUserId = undefined;
   generateForm.periodMode = 'auto';
   generateForm.date = new Date().toISOString().slice(0, 10);
@@ -482,6 +509,7 @@ async function handleGenerate() {
       scope: generateForm.scope,
       targetUserId: generateForm.targetUserId,
       projectId: generateForm.projectId,
+      groupId: generateForm.scope === 'project' ? generateForm.groupId : undefined,
       date: generateForm.periodMode === 'auto' ? generateForm.date : undefined,
       startDate,
       endDate,

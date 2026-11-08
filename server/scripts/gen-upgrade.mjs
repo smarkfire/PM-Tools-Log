@@ -13,8 +13,9 @@ const sql = `-- ============================================================
 -- 生成依据：server/src/scripts/initDb.ts（与全新部署自动迁移完全一致）
 -- 变更内容（纯新增，不修改、不删除任何已有业务数据）：
 --   1. work_logs 新增 source（日志来源 v1/v2）、ai_score（AI 质检得分）两列
---   2. 新增待办表 todo_items（新版填报-今日待办 / 历史待办）
---   3. 新增/更新系统提示词 log_review（AI 日志质量检查与生成规范，随版本自动更新）
+--   2. reports 新增 group_id 列（支持按小组生成项目报告）
+--   3. 新增待办表 todo_items（新版填报-今日待办 / 历史待办）
+--   4. 新增/更新系统提示词 log_review（AI 日志质量检查与生成规范，随版本自动更新）
 -- 特性：幂等，可重复执行，执行前后均不影响历史日志
 -- 用法：在 Supabase SQL Editor 或 psql 中整体执行一次即可
 -- ============================================================
@@ -28,7 +29,13 @@ ALTER TABLE work_logs ADD COLUMN IF NOT EXISTS source   VARCHAR(10) NOT NULL DEF
 ALTER TABLE work_logs ADD COLUMN IF NOT EXISTS ai_score INTEGER;
 
 -- ------------------------------------------------------------
--- 2. 新增待办表 todo_items（新版填报-今日待办）
+-- 2. reports 新增 group_id 列（支持按小组生成项目报告）
+--    已有报告该列为 NULL（整项目报告），不影响历史数据
+-- ------------------------------------------------------------
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS group_id INTEGER REFERENCES project_groups(id) ON DELETE SET NULL;
+
+-- ------------------------------------------------------------
+-- 3. 新增待办表 todo_items（新版填报-今日待办）
 --    已存在则跳过（IF NOT EXISTS），老库历史数据不受影响
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS todo_items (
@@ -43,7 +50,7 @@ CREATE TABLE IF NOT EXISTS todo_items (
 );
 
 -- ------------------------------------------------------------
--- 3. 新增/更新系统提示词 log_review（AI 日志质量检查与好日志生成规范）
+-- 4. 新增/更新系统提示词 log_review（AI 日志质量检查与好日志生成规范）
 --    已存在则更新为最新内容（保证拿到 v1.3.0 定稿规范），不存在则插入
 -- ------------------------------------------------------------
 UPDATE system_prompts
@@ -57,21 +64,25 @@ ${content}$prompt$
 WHERE NOT EXISTS (SELECT 1 FROM system_prompts WHERE type = 'log_review');
 
 -- ------------------------------------------------------------
--- 4. 执行后验证（应在 psql 输出中确认）
+-- 5. 执行后验证（应在 psql 输出中确认）
 -- ------------------------------------------------------------
--- 4.1 work_logs 两列已就绪（应返回 source / ai_score 两行）：
+-- 5.1 work_logs 两列已就绪（应返回 source / ai_score 两行）：
 -- SELECT column_name, data_type, column_default
 -- FROM information_schema.columns
 -- WHERE table_name = 'work_logs' AND column_name IN ('source', 'ai_score');
 --
--- 4.2 待办表已创建（返回 t）：
+-- 5.2 reports.group_id 已就绪（应返回 1 行）：
+-- SELECT column_name FROM information_schema.columns
+-- WHERE table_name = 'reports' AND column_name = 'group_id';
+--
+-- 5.3 待办表已创建（返回 t）：
 -- SELECT to_regclass('public.todo_items') IS NOT NULL AS todo_items_ready;
 --
--- 4.3 质量检查提示词已就绪（返回 1 行，content 长度 > 1000）：
+-- 5.4 质量检查提示词已就绪（返回 1 行，content 长度 > 1000）：
 -- SELECT id, type, name, LENGTH(content) AS content_len, is_active
 -- FROM system_prompts WHERE type = 'log_review';
 --
--- 4.4 既有数据完好（示例：历史日志条数应与升级前一致）：
+-- 5.5 既有数据完好（示例：历史日志条数应与升级前一致）：
 -- SELECT COUNT(*) FROM work_logs;
 `;
 

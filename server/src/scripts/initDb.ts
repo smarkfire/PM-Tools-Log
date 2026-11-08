@@ -161,6 +161,7 @@ CREATE TABLE IF NOT EXISTS reports (
   user_id        INTEGER     NOT NULL REFERENCES users(id),
   target_user_id INTEGER     REFERENCES users(id),
   project_id     INTEGER     REFERENCES projects(id),
+  group_id       INTEGER     REFERENCES project_groups(id) ON DELETE SET NULL, -- 项目报告可指定小组
   period_start   DATE        NOT NULL,
   period_end     DATE        NOT NULL,
   content        TEXT        NOT NULL,
@@ -276,6 +277,7 @@ const SYSTEM_PROMPT_SEEDS: { type: string; name: string; content: string }[] = [
 3. 突出工作量与成果，用数据说话
 4. 语言专业、简洁、易读
 5. 不要编造日志中不存在的内容
+6. 日志采用标准 Markdown 模板：二级标题"项目名称：xxx"（其下第一行"投入时长：X小时"）、"明日计划""问题与风险"，三级标题"小组名称：xxx"。归集项目、小组与工时时严格以这些标题为准，项目名、小组名保持日志原文，不得改写、缩写或另起别名；"明日计划""问题与风险"章节的内容不要计入本期已完成工作
 
 工作日志记录如下：
 `,
@@ -628,17 +630,17 @@ async function initDb() {
   console.log('所有表创建完成');
 
   // 种子数据（幂等插入，显式类型转换避免参数类型推导不一致）
-  // log_review 为新版填报的质检规范，随版本迭代：已存在则更新为最新内容（不覆盖用户自建提示词）
+  // log_review / report 为随版本演进的规范类提示词：已存在则更新为最新内容（不覆盖用户自建提示词）
   for (const p of SYSTEM_PROMPT_SEEDS) {
-    if (p.type === 'log_review') {
+    if (p.type === 'log_review' || p.type === 'report') {
       await query(
-        `UPDATE system_prompts SET name = $1::varchar, content = $2::text WHERE type = 'log_review'`,
-        [p.name, p.content]
+        `UPDATE system_prompts SET name = $1::varchar, content = $2::text WHERE type = $3::varchar`,
+        [p.name, p.content, p.type]
       );
       await query(
         `INSERT INTO system_prompts (type, name, content)
          SELECT $1::varchar, $2::varchar, $3::text
-         WHERE NOT EXISTS (SELECT 1 FROM system_prompts WHERE type = 'log_review')`,
+         WHERE NOT EXISTS (SELECT 1 FROM system_prompts WHERE type = $1::varchar)`,
         [p.type, p.name, p.content]
       );
       continue;
@@ -693,6 +695,9 @@ async function initDb() {
   // （幂等，新库建表已含则跳过；历史日志 source 默认 v1，完整保留）
   await query(`ALTER TABLE work_logs ADD COLUMN IF NOT EXISTS source VARCHAR(10) NOT NULL DEFAULT 'v1'`);
   await query(`ALTER TABLE work_logs ADD COLUMN IF NOT EXISTS ai_score INTEGER`);
+  await query(
+    `ALTER TABLE reports ADD COLUMN IF NOT EXISTS group_id INTEGER REFERENCES project_groups(id) ON DELETE SET NULL`
+  );
 
   const res = await query('SELECT COUNT(*)::int AS cnt FROM users');
   console.log(`当前用户数: ${res.rows[0].cnt}`);

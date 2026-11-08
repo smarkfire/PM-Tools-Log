@@ -208,6 +208,8 @@ export const reportApi = {
     scope: 'personal' | 'project';
     targetUserId?: number;
     projectId?: number;
+    /** 项目报告可指定小组，为该小组单独生成 */
+    groupId?: number;
     date?: string;
     startDate?: string;
     endDate?: string;
