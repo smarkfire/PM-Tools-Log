@@ -97,9 +97,12 @@
                   </span>
                 </div>
               </div>
-              <el-button v-if="canManage" link type="danger" size="small" @click="handleDeleteGroup(group)">
-                删除
-              </el-button>
+              <div v-if="canManage" class="group-actions">
+                <el-button link type="primary" size="small" @click="showEditGroup(group)">编辑</el-button>
+                <el-button link type="danger" size="small" @click="handleDeleteGroup(group)">
+                  删除
+                </el-button>
+              </div>
             </div>
           </div>
           <el-empty v-else description="暂无小组" :image-size="60" />
@@ -229,6 +232,35 @@
       <template #footer>
         <el-button @click="createGroupVisible = false">取消</el-button>
         <el-button type="primary" :loading="creatingGroup" @click="handleCreateGroup">创建</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 编辑小组对话框 -->
+    <el-dialog v-model="editGroupVisible" title="编辑小组" :width="isMobile ? '92%' : '480px'">
+      <el-form label-position="top">
+        <el-form-item label="小组名称">
+          <el-input v-model="editGroupForm.name" placeholder="请输入小组名称" />
+        </el-form-item>
+        <el-form-item label="指定组长（从项目成员中选择）">
+          <el-select
+            v-model="editGroupForm.leaderId"
+            clearable
+            filterable
+            placeholder="未指定"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="m in project.members"
+              :key="m.userId"
+              :label="m.displayName"
+              :value="m.userId"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editGroupVisible = false">取消</el-button>
+        <el-button type="primary" :loading="updatingGroup" @click="handleUpdateGroup">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -440,6 +472,39 @@ async function handleDeleteGroup(group: ProjectGroup) {
   loadProject();
 }
 
+// ==================== 编辑小组 ====================
+const editGroupVisible = ref(false);
+const updatingGroup = ref(false);
+const editGroupForm = reactive({ groupId: 0, name: '', leaderId: undefined as number | undefined });
+
+function showEditGroup(group: ProjectGroup) {
+  editGroupForm.groupId = group.id;
+  editGroupForm.name = group.name;
+  editGroupForm.leaderId = group.leader_id ?? undefined;
+  editGroupVisible.value = true;
+}
+
+async function handleUpdateGroup() {
+  if (!editGroupForm.name.trim()) {
+    ElMessage.warning('请输入小组名称');
+    return;
+  }
+  updatingGroup.value = true;
+  try {
+    await projectApi.updateGroup(projectId.value, editGroupForm.groupId, {
+      name: editGroupForm.name.trim(),
+      leaderId: editGroupForm.leaderId ?? null,
+    });
+    ElMessage.success('小组已更新');
+    editGroupVisible.value = false;
+    loadProject();
+  } catch (e: any) {
+    ElMessage.error('更新失败：' + (e?.response?.data?.message || e?.message || '网络异常'));
+  } finally {
+    updatingGroup.value = false;
+  }
+}
+
 // ==================== 加载 ====================
 async function loadProject() {
   loading.value = true;
@@ -508,6 +573,12 @@ onMounted(loadProject);
   align-items: center;
   justify-content: space-between;
   margin-bottom: 10px;
+}
+
+.group-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .group-name {

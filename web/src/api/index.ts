@@ -55,6 +55,8 @@ export const projectApi = {
     request.delete(`/projects/${projectId}/members/${memberUserId}`),
   createGroup: (projectId: number, data: { name: string; leaderId?: number }) =>
     request.post(`/projects/${projectId}/groups`, data),
+  updateGroup: (projectId: number, groupId: number, data: { name: string; leaderId?: number | null }) =>
+    request.put(`/projects/${projectId}/groups/${groupId}`, data),
   deleteGroup: (projectId: number, groupId: number) =>
     request.delete(`/projects/${projectId}/groups/${groupId}`),
 };

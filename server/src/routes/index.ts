@@ -36,6 +36,7 @@ router.post('/projects/:id/members', authMiddleware, wrap(projectController.addM
 router.put('/projects/:id/members/:memberUserId', authMiddleware, wrap(projectController.updateMember));
 router.delete('/projects/:id/members/:memberUserId', authMiddleware, wrap(projectController.removeMember));
 router.post('/projects/:id/groups', authMiddleware, wrap(projectController.createGroup));
+router.put('/projects/:id/groups/:groupId', authMiddleware, wrap(projectController.updateGroup));
 router.delete('/projects/:id/groups/:groupId', authMiddleware, wrap(projectController.deleteGroup));
 
 // ==================== 工作日志 ====================

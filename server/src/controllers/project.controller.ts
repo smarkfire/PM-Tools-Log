@@ -368,3 +368,45 @@ export async function deleteGroup(req: Request, res: Response) {
   await queryOne('DELETE FROM project_groups WHERE id = $1 AND project_id = $2', [groupId, projectId]);
   res.json(success(null, '小组已删除'));
 }
+
+/**
+ * 编辑项目小组（改名/换组长）（总监/该项目经理）
+ * PUT /api/projects/:id/groups/:groupId
+ */
+export async function updateGroup(req: Request, res: Response) {
+  const userId = req.authUser!.id;
+  const projectId = parseInt(req.params.id, 10);
+  const groupId = parseInt(req.params.groupId, 10);
+  if (!(await canManageProject(userId, projectId))) {
+    res.status(403).json(fail('无权限：仅项目总监或该项目经理可管理小组', 403));
+    return;
+  }
+  const { name, leaderId } = req.body || {};
+  if (!name?.trim()) {
+    res.status(400).json(fail('小组名称为必填项'));
+    return;
+  }
+  const group = await queryOne(
+    `UPDATE project_groups SET name = $1, leader_id = $2
+     WHERE id = $3 AND project_id = $4 RETURNING *`,
+    [name.trim(), leaderId || null, groupId, projectId]
+  );
+  if (!group) {
+    res.status(404).json(fail('小组不存在'));
+    return;
+  }
+  // 指定了组长且其为项目成员：同步其项目角色为 leader 并归入该组（与创建小组逻辑一致）
+  if (leaderId) {
+    await queryOne(
+      `UPDATE project_members SET project_role = 'leader', group_id = $1
+       WHERE project_id = $2 AND user_id = $3`,
+      [groupId, projectId, leaderId]
+    );
+    await queryOne(
+      `INSERT INTO project_group_members (project_id, user_id, group_id)
+       VALUES ($1, $2, $3) ON CONFLICT (project_id, user_id, group_id) DO NOTHING`,
+      [projectId, leaderId, groupId]
+    );
+  }
+  res.json(success(group, '小组已更新'));
+}
