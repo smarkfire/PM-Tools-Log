@@ -413,7 +413,9 @@ SELECT (SELECT id FROM projects WHERE name = v.project_name), v.group_name,
        (SELECT id FROM users WHERE username = v.leader)
 FROM (VALUES
   ('智慧园区平台', '前端组', 'leader1'),
-  ('智慧园区平台', '后端组', 'leader2')
+  ('智慧园区平台', '后端组', 'leader2'),
+  ('大模型项目',   '算法组', 'leader1'),
+  ('大模型项目',   '应用组', 'leader2')
 ) AS v(project_name, group_name, leader)
 WHERE NOT EXISTS (
   SELECT 1 FROM project_groups pg

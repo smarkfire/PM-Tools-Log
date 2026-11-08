@@ -9,7 +9,7 @@
       <div v-if="days.length" class="history-list">
         <div v-for="d in days" :key="d.todo_date" class="day-card">
           <div class="day-head" @click="toggleDetail(d.todo_date)">
-            <span class="day-date">{{ d.todo_date }}</span>
+            <span class="day-date">{{ formatDay(d.todo_date) }}</span>
             <el-tag
               :type="d.total > 0 && d.total === d.done ? 'success' : 'info'"
               size="small"
@@ -51,6 +51,11 @@ const days = ref<TodoDaySummary[]>([]);
 const detail = ref<Record<string, TodoItem[]>>({});
 const expanded = ref<Set<string>>(new Set());
 const loading = ref(false);
+
+/** 后端返回 ISO 时间戳（UTC 零点），仅展示日期部分 */
+function formatDay(d: string) {
+  return String(d).slice(0, 10);
+}
 
 async function load() {
   loading.value = true;

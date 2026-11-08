@@ -15,7 +15,7 @@
           </el-radio-button>
         </el-radio-group>
         <el-button type="primary" @click="$router.push('/logs/write-v2')">
-          <el-icon><MagicStick /></el-icon>去填写
+          <el-icon><EditPen /></el-icon>填写日志
         </el-button>
       </div>
     </div>
@@ -495,6 +495,13 @@ onMounted(loadLogs);
 </script>
 
 <style scoped>
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .header-left {
   min-width: 0;
 }

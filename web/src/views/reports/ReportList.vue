@@ -52,7 +52,9 @@
           </template>
         </el-table-column>
         <el-table-column label="周期" width="180">
-          <template #default="{ row }">{{ row.period_start }} ~ {{ row.period_end }}</template>
+          <template #default="{ row }">
+            {{ formatDateOnly(row.period_start) }} ~ {{ formatDateOnly(row.period_end) }}
+          </template>
         </el-table-column>
         <el-table-column prop="generator_name" label="生成人" width="100" />
         <el-table-column label="AI" width="80">
@@ -88,7 +90,7 @@
           <div class="report-subject">
             {{ r.scope === 'project' ? (r.group_name ? `${r.project_name} · ${r.group_name}` : r.project_name) : (r.target_name || '我') }}
           </div>
-          <div class="report-period">{{ r.period_start }} ~ {{ r.period_end }}</div>
+          <div class="report-period">{{ formatDateOnly(r.period_start) }} ~ {{ formatDateOnly(r.period_end) }}</div>
         </div>
         <el-empty v-if="!loading && reports.length === 0" description="暂无报告" />
       </div>
@@ -129,7 +131,8 @@
         <el-form-item v-if="generateForm.scope === 'project'" label="选择小组（可选，为该小组单独生成）">
           <el-select
             v-model="generateForm.groupId"
-            placeholder="不选则统计整个项目"
+            :placeholder="currentProjectGroups.length ? '不选则统计整个项目' : '该项目下暂无小组'"
+            :disabled="!currentProjectGroups.length"
             clearable
             style="width: 100%"
           >
@@ -247,7 +250,7 @@
             {{ currentReport.scope === 'project' ? `项目：${currentReport.project_name}${currentReport.group_name ? ` · ${currentReport.group_name}` : ''}` : `个人：${currentReport.target_name || '我'}` }}
           </el-descriptions-item>
           <el-descriptions-item label="周期">
-            {{ currentReport.period_start }} ~ {{ currentReport.period_end }}
+            {{ formatDateOnly(currentReport.period_start) }} ~ {{ formatDateOnly(currentReport.period_end) }}
           </el-descriptions-item>
         </el-descriptions>
         <div class="report-content">
@@ -370,9 +373,9 @@ const managedProjects = computed(() =>
 
 const canGenerateProject = computed(() => managedProjects.value.length > 0);
 
-// 当前所选项目的小组（项目报告可为单个小组生成）
+// 当前所选项目的小组（项目报告可为单个小组生成）——随所选项目联动
 const currentProjectGroups = computed(
-  () => managedProjects.value.find((p) => p.id === generateForm.projectId)?.groups || []
+  () => projects.value.find((p) => p.id === generateForm.projectId)?.groups || []
 );
 
 // 切换项目时清空已选小组，避免小组与项目不匹配
@@ -401,6 +404,11 @@ const visibleMembers = computed(() => {
 
 function formatTime(t: string) {
   return new Date(t).toLocaleString('zh-CN', { hour12: false });
+}
+
+/** 周期起止为 ISO 时间戳，仅展示日期部分 */
+function formatDateOnly(t: string) {
+  return String(t).slice(0, 10);
 }
 
 // ==================== 编辑与跨周审批 ====================
