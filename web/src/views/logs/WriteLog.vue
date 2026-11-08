@@ -1,7 +1,55 @@
 <template>
   <div class="page-container">
     <div class="page-header">
-      <div class="page-title">{{ isEdit ? `编辑日志（${form.logDate}）` : '填写日志' }}</div>
+      <div class="page-title">
+        {{ isEdit ? `编辑日志（${form.logDate}）` : '填写日志' }}
+        <el-popover placement="bottom-start" :width="560" trigger="hover" popper-class="tips-popover-popper">
+          <template #reference>
+            <el-icon class="tips-trigger"><InfoFilled /></el-icon>
+          </template>
+          <div class="tips-popover">
+            <p class="tips-slogan">
+              标准：别人不看代码、不开会，也能知道你这天<strong>干了什么、干到什么程度、明天从哪继续</strong>。AI 按此规范检查并打分（满分 100），<strong>达到 80 分</strong>才能生成定稿。
+            </p>
+            <p class="tips-structure-title">标准日志模板（Markdown 层级）：</p>
+            <pre class="tips-template"># 张三 2026-11-07 的日志
+## 项目名称：{项目名称}
+- 投入时长：X小时
+### 小组名称：{小组名称}
+- {做了什么，有什么成果}
+## 明日计划
+- {后续工作安排}
+## 问题与风险
+- {卡点或需要的协助}</pre>
+            <ol>
+              <li><strong>一级标题</strong>：谁的哪天的日志</li>
+              <li><strong>二级标题</strong>："项目名称：xxx"（下写当天总投入时长）、明日计划、问题与风险</li>
+              <li><strong>三级标题</strong>："小组名称：xxx"，组下逐条写事项</li>
+              <li><strong>每条事项</strong>：写清"做了什么、有什么成果"，对象融进句子（模块、页面、接口、文档、Bug 号），带进展状态，尽量量化</li>
+            </ol>
+            <p class="tips-structure-title">事项怎么写算好？公式：进展 + 对象 + 动作 + 成果：</p>
+            <table class="tips-table">
+              <tr><th>差的表述</th><th>好的表述</th></tr>
+              <tr><td>处理了一些需求</td><td>完成用户管理页权限校验开发，提测通过</td></tr>
+              <tr><td>修 Bug</td><td>修复登录 token 过期闪退问题（BUG-128），已上线</td></tr>
+              <tr><td>继续做</td><td>智能体问答功能开发（进度 80%），剩余评测模块</td></tr>
+            </table>
+            <p class="tips-structure-title">评分构成（满分 100）：</p>
+            <ol class="tips-score-list">
+              <li><strong>规范符合度 40 分</strong>：结构层级正确（10）＋ 投入时长明确（10）＋ 明日计划（10）＋ 问题与风险（10，如实写"无"不扣）</li>
+              <li>
+                <strong>事项质量 60 分</strong>：每条事项按五条标准逐条核对，取平均折算——
+                ① 有具体对象（融进句子，如模块/页面/接口/文档/Bug号）
+                ② 有进展状态（完成 / 进行中百分比 / 受阻）
+                ③ 有量化成果（数字/产出物，如实说明）
+                ④ 一条一件事
+                ⑤ 写结果不写过程（排查类写根因结论）
+                笼统表述（"处理了一些工作""继续做"）按条扣分
+              </li>
+            </ol>
+          </div>
+        </el-popover>
+      </div>
       <div class="page-desc">
         {{ isEdit
           ? '修改已有日志并保存；超过本周的修改需上级审批通过后才可提交'
@@ -32,6 +80,17 @@
                 </el-form-item>
               </el-col>
               <el-col :xs="24" :sm="12">
+                <el-form-item label="工作时长（小时）">
+                  <el-input-number
+                    v-model="form.hours"
+                    :min="0"
+                    :max="24"
+                    :step="0.5"
+                    style="width: 100%"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :sm="12">
                 <el-form-item label="所属项目" required>
                   <el-select
                     v-model="form.projectId"
@@ -48,19 +107,8 @@
                   </el-select>
                 </el-form-item>
               </el-col>
-              <el-col :xs="24" :sm="12">
-                <el-form-item label="工作时长（小时）">
-                  <el-input-number
-                    v-model="form.hours"
-                    :min="0"
-                    :max="24"
-                    :step="0.5"
-                    style="width: 100%"
-                  />
-                </el-form-item>
-              </el-col>
-              <el-col v-if="form.projectId && projectGroups.length" :span="24">
-                <el-form-item label="涉及小组（可多选，工时按组分配）">
+              <el-col v-if="form.projectId && projectGroups.length" :xs="24" :sm="12">
+                <el-form-item label="涉及小组（可多选）">
                   <el-select
                     v-model="groupSelection"
                     multiple
@@ -70,62 +118,9 @@
                   >
                     <el-option v-for="g in projectGroups" :key="g.id" :label="g.name" :value="g.id" />
                   </el-select>
-                  <div v-if="groupSelection.length" class="group-hours-list">
-                    <div v-for="gid in groupSelection" :key="gid" class="group-hours-row">
-                      <span class="group-hours-name">{{ groupNameOf(gid) }}</span>
-                      <el-input-number
-                        v-model="groupHoursMap[gid]"
-                        :min="0"
-                        :max="24"
-                        :step="0.5"
-                        size="small"
-                        controls-position="right"
-                      />
-                      <span class="group-hours-unit">h</span>
-                    </div>
-                    <div
-                      class="group-hours-tip"
-                      :class="{ 'group-hours-exceed': groupHoursExceeded }"
-                    >
-                      <template v-if="groupHoursExceeded">
-                        各小组工时之和（{{ groupHoursSum }}h）已超过当天总工时（{{ form.hours ?? 0 }}h），请调整
-                      </template>
-                      <template v-else>
-                        默认按总工时均摊到各组，可按实际投入修改；已分配 {{ groupHoursSum }}h / {{ form.hours ?? 0 }}h
-                      </template>
-                    </div>
-                  </div>
                 </el-form-item>
               </el-col>
             </el-row>
-
-            <!-- 填写要点（可折叠，记住展开状态） -->
-            <el-collapse v-model="tipsVisible" class="write-tips">
-              <el-collapse-item name="open">
-                <template #title>
-                  <span class="write-tips-title">
-                    <el-icon><InfoFilled /></el-icon>
-                    填写要点：什么样的日志算好日志？
-                  </span>
-                </template>
-                <div class="write-tips-body">
-                  <p class="write-tips-slogan">
-                    标准：别人不看代码、不开会，也能知道你这天<strong>干了什么、干到什么程度、明天从哪继续</strong>。
-                  </p>
-                  <ol>
-                    <li><strong>做了什么</strong>：具体到任务，不写笼统词——写“修复订单导出超时，改用分页查询”，别写“处理了些开发工作”</li>
-                    <li><strong>进展结果</strong>：完成 / 进行中（百分比）/ 受阻，带可验证产出（接口数、用例数、Bug 编号）</li>
-                    <li><strong>工时投入</strong>：如实填写，跨组工作按组分配，这是统计与报告的数据基础</li>
-                    <li><strong>问题风险</strong>：卡点、需要谁协助、有何风险——问题早暴露一天，损失就小一分</li>
-                    <li><strong>后续计划</strong>：一两句话即可，让工作有连续性</li>
-                  </ol>
-                  <pre class="write-tips-template">【今日完成】登录模块联调完成，修复3个Bug
-【进行中】订单导出优化（80%）
-【问题】测试环境数据库不稳定，等待运维处理
-【明日计划】导出功能自测并提测</pre>
-                </div>
-              </el-collapse-item>
-            </el-collapse>
 
             <el-form-item>
               <template #label>
@@ -243,7 +238,7 @@
             size="large"
             style="width: 100%"
             :loading="saving"
-            :disabled="!form.content?.trim() || !form.projectId || groupHoursExceeded"
+            :disabled="!form.content?.trim() || !form.projectId"
             @click="handleSave"
           >
             <el-icon><Check /></el-icon>
@@ -284,11 +279,6 @@ const router = useRouter();
 const editDate = computed(() => (route.query.date as string) || '');
 const isEdit = computed(() => !!editDate.value);
 
-// 填写要点折叠面板（记住展开状态）
-const TIPS_KEY = 'matelog_write_tips_open';
-const tipsVisible = ref<string[]>(localStorage.getItem(TIPS_KEY) === '1' ? ['open'] : []);
-watch(tipsVisible, (v) => localStorage.setItem(TIPS_KEY, v.includes('open') ? '1' : '0'));
-
 // 可填写日期范围：本周一 ~ 本周日（编辑模式日期锁定为原日志日期）
 const weekMonday = currentWeekMonday();
 const mondayTime = new Date(weekMonday + 'T00:00:00').getTime();
@@ -311,9 +301,8 @@ const resultView = ref<'edit' | 'preview'>('preview');
 const optimizing = ref(false);
 const saving = ref(false);
 
-// ===== 跨组协作：涉及小组多选 + 各组投入工时 =====
+// ===== 跨组协作：涉及小组多选（工时不再按组分配，统一记当天总工时） =====
 const groupSelection = ref<number[]>([]);
-const groupHoursMap = reactive<Record<number, number | undefined>>({});
 
 // 当前所选项目下的小组（需为项目成员才可标记，由后端校验）
 const projectGroups = computed(() => {
@@ -321,44 +310,12 @@ const projectGroups = computed(() => {
   return p?.groups || [];
 });
 
-function groupNameOf(gid: number): string {
-  return projectGroups.value.find((g) => g.id === gid)?.name || `小组#${gid}`;
-}
-
 // 切换项目时清空小组选择
 watch(
   () => form.projectId,
   () => {
     groupSelection.value = [];
-    Object.keys(groupHoursMap).forEach((k) => delete groupHoursMap[Number(k)]);
   }
-);
-
-// 新增勾选小组时按总工时均摊预填（已有的不覆盖，可手动修改）
-watch(groupSelection, (ids) => {
-  const n = ids.length;
-  if (!n) return;
-  const even = form.hours != null ? Math.round((form.hours / n) * 10) / 10 : undefined;
-  ids.forEach((id) => {
-    if (groupHoursMap[id] == null) groupHoursMap[id] = even;
-  });
-});
-
-// 各小组工时之和（未填写的按总工时均摊估算，与保存逻辑一致）
-const groupHoursSum = computed(() => {
-  const n = groupSelection.value.length;
-  if (!n) return 0;
-  const even = form.hours != null ? Math.round((form.hours / n) * 10) / 10 : 0;
-  const sum = groupSelection.value.reduce(
-    (s, gid) => s + (groupHoursMap[gid] != null ? (groupHoursMap[gid] as number) : even),
-    0
-  );
-  return Math.round(sum * 10) / 10;
-});
-
-// 校验：各小组工时之和不能大于当天总工时
-const groupHoursExceeded = computed(
-  () => groupSelection.value.length > 0 && groupHoursSum.value > (form.hours ?? 0)
 );
 
 onMounted(async () => {
@@ -392,14 +349,11 @@ onMounted(async () => {
       form.content = existing.content;
       form.aiProvider = existing.ai_provider || '';
       optimizedContent.value = existing.optimized_content || '';
-      // 回填已标记的小组与各组工时
+      // 回填已标记的小组（工时不再按组分配）
       // nextTick：等 projectId 变化的 watcher（清空小组选择）先执行完毕
       if (existing.group_marks?.length) {
         nextTick(() => {
           groupSelection.value = existing.group_marks!.map((m) => m.groupId);
-          existing.group_marks!.forEach((m) => {
-            groupHoursMap[m.groupId] = m.hours ?? undefined;
-          });
         });
       }
     }
@@ -413,8 +367,22 @@ async function handleOptimize() {
   }
   optimizing.value = true;
   try {
+    // 上下文头：供提示词按标准模板回填姓名/日期/项目/小组/投入时长
+    const proj = projects.value.find((p) => p.id === form.projectId);
+    const groupNames = groupSelection.value
+      .map((gid) => projectGroups.value.find((g) => g.id === gid)?.name || '')
+      .filter(Boolean);
+    const ctx = [
+      `姓名：${userStore.user?.display_name || userStore.user?.username || '（待补充）'}`,
+      `日期：${form.logDate}`,
+      form.projectId ? `项目名称：${proj?.name || '（待补充）'}` : '',
+      groupNames.length ? `小组名称：${groupNames.join('、')}` : '',
+      `投入时长：${form.hours ?? 0}小时`,
+    ]
+      .filter(Boolean)
+      .join('\n');
     const res = await logApi.optimize({
-      content: form.content,
+      content: `${ctx}\n\n工作内容：\n${form.content}`,
       provider: aiProvider.value,
       promptId: selectedPromptId.value,
     });
@@ -445,18 +413,12 @@ async function handleSave() {
     ElMessage.warning('请选择日志日期');
     return;
   }
-  if (groupHoursExceeded.value) {
-    ElMessage.warning(
-      `各小组工时之和（${groupHoursSum.value}h）不能大于当天总工时（${form.hours ?? 0}h）`
-    );
-    return;
-  }
   // 未使用 AI 优化时提醒用户确认（防遗忘；不想用 AI 的用户可选择直接保存）
   if (!optimizedContent.value?.trim()) {
     let action = 'close';
     try {
       await ElMessageBox.confirm(
-        '当前日志尚未使用 AI 优化，保存后将以原始内容存档（可能影响报告生成质量）。\nAI 优化会按五要素自动整理：完成事项、进展结果、工时投入、问题风险、后续计划。建议先优化。',
+        '当前日志尚未使用 AI 优化，保存后将以原始内容存档（可能影响报告生成质量）。\nAI 优化会按标准日志模板自动整理：项目/小组/事项成果/明日计划/问题与风险。建议先优化。',
         '未使用 AI 优化',
         {
           type: 'warning',
@@ -493,7 +455,7 @@ async function handleSave() {
       hours: form.hours,
       groups: groupSelection.value.map((gid) => ({
         groupId: gid,
-        hours: groupHoursMap[gid] ?? null,
+        hours: null,
       })),
     });
     ElMessage.success('日志保存成功');
@@ -581,95 +543,79 @@ async function handleSave() {
   margin-top: 8px;
 }
 
-/* 跨组协作：各小组工时分配 */
-.group-hours-list {
-  width: 100%;
-  margin-top: 8px;
-  padding: 8px 12px;
-  background: var(--el-fill-color-light);
-  border-radius: var(--radius-base);
-}
-
-.group-hours-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 4px 0;
-}
-
-.group-hours-name {
-  flex: 1;
-  font-size: 13px;
-}
-
-.group-hours-unit {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.group-hours-tip {
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.group-hours-exceed {
-  color: var(--danger-color);
-  font-weight: 500;
-}
-
-/* ==================== 填写要点 ==================== */
-.write-tips {
-  margin-bottom: 18px;
-  border: 1px dashed var(--border-color, #dcdfe6);
-  border-radius: 8px;
-  background: var(--bg-hover, #f8f9fb);
-}
-
-.write-tips :deep(.el-collapse-item__header) {
-  padding: 0 12px;
-  background: transparent;
-}
-
-.write-tips :deep(.el-collapse-item__wrap) {
-  background: transparent;
-  border-bottom: none;
-}
-
-.write-tips :deep(.el-collapse-item__content) {
-  padding: 0 16px 14px;
-}
-
-.write-tips-title {
+/* ==================== 填写要点气泡（与新版一致） ==================== */
+.page-header .page-title {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 600;
+}
+
+.tips-trigger {
+  margin-left: 6px;
   color: var(--primary-color, #409eff);
+  cursor: help;
+  font-size: 17px;
+  vertical-align: -2px;
 }
 
-.write-tips-body {
+.tips-popover {
   font-size: 13px;
-  line-height: 1.8;
-  color: var(--text-secondary, #606266);
+  color: var(--text-regular, #606266);
+  line-height: 1.7;
+  max-height: 480px;
+  overflow-y: auto;
+  padding-right: 6px;
 }
 
-.write-tips-slogan {
+/* 气泡全局样式（popper 渲染在 body 下，需 popper-class 定制） */
+:global(.tips-popover-popper) {
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1);
+}
+
+:global(.tips-popover-popper .tips-popover) {
+  scrollbar-width: thin;
+  scrollbar-color: #d4d7de transparent;
+}
+
+.tips-popover ol {
+  padding-left: 18px;
+  margin: 6px 0;
+}
+
+.tips-popover li {
+  margin: 3px 0;
+}
+
+.tips-slogan {
   margin: 0 0 6px;
 }
 
-.write-tips-body ol {
+.tips-structure-title {
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+
+.tips-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 4px 0 6px;
+  font-size: 12px;
+}
+
+.tips-table th,
+.tips-table td {
+  border: 1px solid var(--border-color, #ebeef5);
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.tips-table th {
+  background: var(--bg-page, #f5f7fa);
+  font-weight: 600;
+}
+
+.tips-template {
   margin: 6px 0;
-  padding-left: 20px;
-}
-
-.write-tips-body strong {
-  color: var(--text-primary, #303133);
-}
-
-.write-tips-template {
-  margin: 8px 0 0;
   padding: 10px 12px;
   border-radius: 6px;
   background: var(--bg-page, #f5f7fa);
@@ -679,6 +625,18 @@ async function handleSave() {
   font-family: inherit;
   white-space: pre-wrap;
   color: var(--text-secondary, #606266);
+}
+
+.tips-score-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--text-secondary, #909399);
+  line-height: 1.8;
+}
+
+.tips-score-list li {
+  margin: 4px 0;
 }
 
 .content-label {

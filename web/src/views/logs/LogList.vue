@@ -1,9 +1,21 @@
 <template>
   <div class="page-container">
     <div class="page-header">
-      <div class="page-title">{{ isTeam ? '团队日志' : '我的日志' }}</div>
-      <div class="page-desc">
-        {{ isTeam ? '根据您的数据权限展示可见范围内成员的日志' : '我填写的所有工作日志' }}
+      <div class="header-left">
+        <div class="page-title">{{ isTeam ? '团队日志' : '我的日志' }}</div>
+        <div class="page-desc">
+          {{ isTeam ? '根据您的数据权限展示可见范围内成员的日志' : '我填写的所有工作日志' }}
+        </div>
+      </div>
+      <div v-if="!isMobile" class="header-tools">
+        <el-radio-group v-model="viewMode" size="small" @change="onViewModeChange">
+          <el-radio-button value="card">
+            <el-icon style="margin-right: 4px; vertical-align: -2px"><Grid /></el-icon>卡片
+          </el-radio-button>
+          <el-radio-button value="list">
+            <el-icon style="margin-right: 4px; vertical-align: -2px"><List /></el-icon>列表
+          </el-radio-button>
+        </el-radio-group>
       </div>
     </div>
 
@@ -74,8 +86,8 @@
 
     <!-- 日志列表：桌面表格 / 移动端卡片 -->
     <el-card shadow="never" v-loading="loading">
-      <!-- 桌面端表格 -->
-      <el-table v-if="!isMobile" :data="logs" stripe>
+      <!-- 桌面端表格（列表视图） -->
+      <el-table v-if="!isMobile && viewMode === 'list'" :data="logs" stripe>
         <el-table-column prop="log_date" label="日志日期" width="110">
           <template #default="{ row }">{{ formatDateOnly(row.log_date) }}</template>
         </el-table-column>
@@ -150,19 +162,55 @@
         </el-table-column>
       </el-table>
 
-      <!-- 移动端卡片 -->
-      <div v-else class="mobile-log-list">
-        <div v-for="log in logs" :key="log.id" class="mobile-log-item" @click="viewLog(log)">
-          <div class="mobile-log-top">
-            <span class="log-date">{{ formatDateOnly(log.log_date) }}</span>
-            <el-tag v-if="log.project_name" size="small" effect="light">{{ log.project_name }}</el-tag>
-            <span v-if="log.hours" class="log-hours">{{ log.hours }}h</span>
+      <!-- 卡片视图（可切换 / 移动端固定） -->
+      <div v-else class="log-cards">
+        <div
+          v-for="log in logs"
+          :key="log.id"
+          class="log-card"
+          :class="accentClass(log.ai_score)"
+          @click="viewLog(log)"
+        >
+          <div class="card-top">
+            <span class="card-date">{{ formatDateOnly(log.log_date) }}</span>
+            <span class="score-badge" :class="scoreClass(log.ai_score)">
+              {{ log.ai_score != null ? log.ai_score + ' 分' : '未评分' }}
+            </span>
           </div>
-          <div v-if="isTeam" class="mobile-log-user">{{ log.user_name }}</div>
-          <div class="log-preview">{{ previewText(log) }}</div>
-          <div class="mobile-log-datetime">数据时间：{{ formatDateTime(log.created_at) }}</div>
+          <div v-if="log.project_name || isTeam" class="card-projects">
+            <el-tag v-if="log.project_name" size="small" effect="light">{{ log.project_name }}</el-tag>
+            <el-tag v-if="isTeam" size="small" type="info" effect="plain">{{ log.user_name }}</el-tag>
+          </div>
+          <div class="card-preview">{{ previewText(log) }}</div>
+          <div class="card-foot">
+            <span v-if="log.hours" class="card-hours">{{ log.hours }}h</span>
+            <el-tag v-if="log.ai_provider" size="small" :type="log.ai_provider === 'qwen' ? 'primary' : 'success'">
+              {{ log.ai_provider === 'qwen' ? '千问' : 'DS' }}
+            </el-tag>
+            <span class="card-time">{{ formatDateTime(log.created_at) }}</span>
+          </div>
+          <div v-if="log.user_id === userStore.user?.id" class="card-actions" @click.stop>
+            <el-button
+              v-if="canDirectEdit(log)"
+              link
+              type="primary"
+              size="small"
+              @click="handleEditLog(log)"
+            >
+              编辑
+            </el-button>
+            <el-button v-else-if="log.edit_approval_status === 'pending'" link type="info" size="small" disabled>
+              审批中
+            </el-button>
+            <el-button v-else link type="warning" size="small" @click="handleApplyEdit(log)">
+              申请编辑
+            </el-button>
+            <el-button v-if="isInCurrentWeek(log.log_date)" link type="danger" size="small" @click="handleDelete(log)">
+              删除
+            </el-button>
+          </div>
         </div>
-        <el-empty v-if="!loading && logs.length === 0" description="暂无日志" />
+        <el-empty v-if="!loading && logs.length === 0" description="暂无日志" :image-size="80" />
       </div>
 
       <!-- 分页 -->
@@ -290,6 +338,31 @@ const appStore = useAppStore();
 
 const isMobile = computed(() => appStore.isMobile);
 const isTeam = computed(() => route.path === '/logs/all');
+
+// 视图切换：列表 / 卡片（记忆用户选择；移动端固定卡片）
+const VIEW_KEY = 'matelog_loglist_view';
+const viewMode = ref<'card' | 'list'>(
+  localStorage.getItem(VIEW_KEY) === 'card' ? 'card' : 'list'
+);
+function onViewModeChange() {
+  localStorage.setItem(VIEW_KEY, viewMode.value);
+}
+
+/** 得分徽章配色 */
+function scoreClass(s: number | null | undefined) {
+  if (s == null) return 'score-none';
+  if (s >= 80) return 'score-high';
+  if (s >= 60) return 'score-mid';
+  return 'score-low';
+}
+
+/** 卡片左侧得分色条 */
+function accentClass(s: number | null | undefined) {
+  if (s == null) return '';
+  if (s >= 80) return 'accent-high';
+  if (s >= 60) return 'accent-mid';
+  return 'accent-low';
+}
 
 const logs = ref<WorkLog[]>([]);
 const total = ref(0);
@@ -444,57 +517,160 @@ onMounted(async () => {
   line-height: 1.5;
 }
 
-/* 移动端卡片样式 */
-.mobile-log-list {
+/* ==================== 卡片视图（与新版我的日志一致） ==================== */
+.page-header {
   display: flex;
-  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 12px;
 }
 
-.mobile-log-item {
+.header-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.header-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.log-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+}
+
+.log-card {
+  position: relative;
+  overflow: hidden;
   background: var(--bg-card, #fff);
   border: 1px solid var(--border-lighter, #ebeef5);
   border-radius: 12px;
-  padding: 14px;
+  padding: 14px 16px 12px 20px;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 150px;
   box-shadow: var(--shadow-sm);
-  transition: box-shadow 0.2s, transform 0.2s;
+  transition: box-shadow 0.2s, transform 0.2s, border-color 0.2s;
 }
 
-.mobile-log-item:active {
-  background: #f5f7fa;
-  transform: scale(0.995);
+/* 左侧得分色条 */
+.log-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: #d4d7de;
 }
 
-.mobile-log-top {
+.log-card.accent-high::before {
+  background: #2e9e5b;
+}
+
+.log-card.accent-mid::before {
+  background: #cf8a2a;
+}
+
+.log-card.accent-low::before {
+  background: #d65a5a;
+}
+
+.log-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+  border-color: var(--primary-color, #409eff);
+}
+
+.card-top {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
+  justify-content: space-between;
 }
 
-.log-date {
-  font-size: 13px;
+.card-date {
+  font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.log-hours {
+.score-badge {
   font-size: 12px;
-  color: var(--text-secondary);
-  margin-left: auto;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 999px;
+  flex-shrink: 0;
 }
 
-.mobile-log-datetime {
-  margin-top: 6px;
+.score-high {
+  background: #e8f7ee;
+  color: #2e9e5b;
+}
+
+.score-mid {
+  background: #fdf3e7;
+  color: #cf8a2a;
+}
+
+.score-low {
+  background: #fdeaea;
+  color: #d65a5a;
+}
+
+.score-none {
+  background: #f0f2f5;
+  color: #909399;
+}
+
+.card-projects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.card-preview {
+  color: var(--text-regular);
+  font-size: 13px;
+  line-height: 1.6;
+  flex: 1;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.card-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.card-hours {
+  font-weight: 600;
+  color: var(--text-regular);
+}
+
+.card-time {
+  margin-left: auto;
   font-size: 12px;
   color: var(--text-placeholder);
 }
 
-.mobile-log-user {
-  font-size: 12px;
-  color: var(--primary-color);
-  margin-bottom: 4px;
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-top: 1px dashed var(--border-lighter, #ebeef5);
+  padding-top: 6px;
+  min-height: 24px;
 }
 
 /* 详情 */
