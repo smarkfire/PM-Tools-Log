@@ -539,7 +539,6 @@ export async function reviewLog(req: Request, res: Response) {
     res.status(400).json(fail('日志内容为空，无法质检'));
     return;
   }
-  const aiProvider: AiProvider = provider === 'deepseek' ? 'deepseek' : 'qwen';
 
   const systemPrompt = await getEffectivePrompt(userId, 'log_review');
   if (!systemPrompt) {
@@ -553,6 +552,12 @@ export async function reviewLog(req: Request, res: Response) {
   );
   const displayName = me?.display_name || '我';
   const userAiConfig = await getUserAiConfig(userId);
+
+  // 未显式指定模型时，自动选择已配置 Key 的模型（默认千问，未配置则回退 DeepSeek）
+  let aiProvider: AiProvider = provider === 'deepseek' ? 'deepseek' : 'qwen';
+  if (provider !== 'deepseek' && provider !== 'qwen') {
+    aiProvider = userAiConfig.qwen.apiKey ? 'qwen' : 'deepseek';
+  }
 
   const messages: ChatMessage[] = [
     { role: 'system', content: systemPrompt },

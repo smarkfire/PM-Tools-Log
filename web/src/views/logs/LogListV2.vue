@@ -317,7 +317,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { approvalApi, logApi } from '../../api';
+import { approvalApi, chatApi, logApi } from '../../api';
 import { useUserStore } from '../../stores/user';
 import { useAppStore } from '../../stores/app';
 import { formatDateTime, isInCurrentWeek } from '../../utils/date';
@@ -507,10 +507,17 @@ async function saveEdited() {
   reviewResult.value = null;
   reviewVisible.value = true;
   reviewing.value = true;
+  // 质检模型：优先用日志生成时的模型（若仍可用），否则用已配置的默认模型
+  const preferredProvider =
+    (log.ai_provider === 'deepseek' && providers.deepseekConfigured) ||
+    (log.ai_provider === 'qwen' && providers.qwenConfigured)
+      ? log.ai_provider
+      : defaultProvider.value;
   try {
     const res = await logApi.review({
       date: String(log.log_date).slice(0, 10),
       content: editForm.content.trim(),
+      provider: preferredProvider || undefined,
     });
     reviewResult.value = res.data;
   } catch (e: any) {
@@ -566,6 +573,22 @@ async function handleDelete(log: WorkLog) {
 }
 
 onMounted(loadLogs);
+
+// ==================== AI 模型可用性（质检时自动选已配置的模型） ====================
+const providers = reactive({ qwenConfigured: false, deepseekConfigured: false });
+const defaultProvider = computed<'qwen' | 'deepseek'>(() =>
+  providers.qwenConfigured ? 'qwen' : 'deepseek'
+);
+
+onMounted(async () => {
+  try {
+    const res = await chatApi.providers();
+    providers.qwenConfigured = res.data.qwenConfigured;
+    providers.deepseekConfigured = res.data.deepseekConfigured;
+  } catch {
+    /* 忽略：保持默认 */
+  }
+});
 </script>
 
 <style scoped>
