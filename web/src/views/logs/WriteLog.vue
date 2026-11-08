@@ -275,8 +275,8 @@ const today = formatDate(new Date());
 const route = useRoute();
 const router = useRouter();
 
-// 编辑模式：?date=YYYY-MM-DD 时加载当天已有日志
-const editDate = computed(() => (route.query.date as string) || '');
+// 编辑模式：?date=YYYY-MM-DD 时加载当天已有日志（防止手输链接带时间部分）
+const editDate = computed(() => ((route.query.date as string) || '').slice(0, 10));
 const isEdit = computed(() => !!editDate.value);
 
 // 可填写日期范围：本周一 ~ 本周日（编辑模式日期锁定为原日志日期）
@@ -343,7 +343,8 @@ onMounted(async () => {
     });
     const existing = res.data.list?.[0];
     if (existing) {
-      form.logDate = existing.log_date;
+      // log_date 可能返回 ISO 时间戳（2026-11-08T00:00:00.000Z），截取日期部分
+      form.logDate = String(existing.log_date).slice(0, 10);
       form.projectId = existing.project_id || undefined;
       form.hours = existing.hours ?? 8;
       form.content = existing.content;
