@@ -12,7 +12,7 @@
               标准：别人不看代码、不开会，也能知道你这天<strong>干了什么、干到什么程度、明天从哪继续</strong>。AI 按此规范检查并打分（满分 100），<strong>达到 80 分</strong>才能生成定稿。
             </p>
             <p class="tips-structure-title">标准日志模板（Markdown 层级）：</p>
-            <pre class="tips-template"># 张三 2026-11-07 的日志
+            <pre class="tips-template"># 2026-11-07 张三 的日志
 ## 项目名称：{项目名称}
 - 投入时长：X小时
 ### 小组名称：{小组名称}
@@ -59,7 +59,7 @@
 
     <el-row :gutter="16">
       <!-- 编辑区 -->
-      <el-col :xs="24" :md="14">
+      <el-col :xs="24" :md="12">
         <el-card shadow="never">
           <template #header>
             <span class="card-title">日志内容</span>
@@ -148,7 +148,7 @@
       </el-col>
 
       <!-- AI 优化区 -->
-      <el-col :xs="24" :md="10">
+      <el-col :xs="24" :md="12">
         <el-card shadow="never" class="optimize-card">
           <template #header>
             <div class="optimize-header">
@@ -252,8 +252,14 @@
     </el-row>
 
     <!-- 保存前质量检查结果 -->
-    <el-dialog v-model="reviewVisible" title="保存前质量检查" width="min(92vw, 520px)" top="8vh">
-      <div v-if="!reviewResult" v-loading="reviewing" class="review-loading">AI 正在质检日志，请稍候…</div>
+    <el-dialog v-model="reviewVisible" title="保存前质量检查" width="min(92vw, 520px)" top="8vh" :close-on-click-modal="false">
+      <div v-if="!reviewResult" class="review-loading">
+        <el-icon class="review-spin"><Loading /></el-icon>
+        <div class="review-loading-text">
+          <div class="review-loading-title">AI 正在质检日志…</div>
+          <div class="review-loading-step">{{ reviewStep }}</div>
+        </div>
+      </div>
       <template v-else>
         <div class="review-score-row">
           <span class="review-score" :class="scoreClass(reviewResult.score)">
@@ -272,7 +278,7 @@
         </template>
       </template>
       <template #footer>
-        <el-button @click="reviewVisible = false">返回修改</el-button>
+        <el-button @click="cancelReview">返回修改</el-button>
         <el-button type="success" :loading="saving" :disabled="!reviewResult" @click="doSave">
           确认保存
         </el-button>
@@ -282,7 +288,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { logApi, projectApi, promptApi, chatApi } from '../../api';
@@ -335,6 +341,40 @@ const reviewVisible = ref(false);
 const reviewResult = ref<{ score: number | null; summary: string; suggestions: string[] } | null>(
   null
 );
+
+// 质检动作提示：轮换展示当前正在做的步骤
+const REVIEW_STEPS = [
+  '正在解析日志结构…',
+  '正在逐项核对好日志规范…',
+  '正在评估事项质量与量化成果…',
+  '正在计算质量得分…',
+];
+const reviewStep = ref(REVIEW_STEPS[0]);
+let reviewStepTimer: number | undefined;
+
+function startReviewSteps() {
+  stopReviewSteps();
+  let i = 0;
+  reviewStep.value = REVIEW_STEPS[0];
+  reviewStepTimer = window.setInterval(() => {
+    i = Math.min(i + 1, REVIEW_STEPS.length - 1);
+    reviewStep.value = REVIEW_STEPS[i];
+  }, 2600);
+}
+
+function stopReviewSteps() {
+  if (reviewStepTimer) {
+    clearInterval(reviewStepTimer);
+    reviewStepTimer = undefined;
+  }
+}
+
+/** 质检中点击"返回修改"：关闭弹窗并复位状态 */
+function cancelReview() {
+  reviewVisible.value = false;
+  reviewing.value = false;
+  stopReviewSteps();
+}
 
 /** 质检分数徽章配色 */
 function scoreClass(s: number | null | undefined) {
@@ -403,6 +443,8 @@ onMounted(async () => {
     }
   }
 });
+
+onUnmounted(stopReviewSteps);
 
 async function handleOptimize() {
   if (!form.content?.trim()) {
@@ -492,6 +534,7 @@ async function handleSave() {
   reviewing.value = true;
   reviewResult.value = null;
   reviewVisible.value = true;
+  startReviewSteps();
   try {
     const res = await logApi.review({
       date: form.logDate,
@@ -499,9 +542,12 @@ async function handleSave() {
       provider: aiProvider.value,
     });
     reviewResult.value = res.data;
+    stopReviewSteps();
   } catch {
+    stopReviewSteps();
     // 质检失败：关闭弹窗，由用户选择是否跳过直接保存
     reviewVisible.value = false;
+    reviewing.value = false;
     try {
       await ElMessageBox.confirm('AI 质检服务暂时不可用，是否跳过质检直接保存？', '质检失败', {
         type: 'warning',
@@ -638,12 +684,53 @@ async function doSave() {
 
 /* ==================== 保存前质量检查弹窗 ==================== */
 .review-loading {
-  min-height: 90px;
+  min-height: 120px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: var(--text-secondary);
+  gap: 14px;
+  padding: 10px 0;
+}
+
+.review-spin {
+  font-size: 38px;
+  color: var(--primary-color, #409eff);
+  animation: review-rotate 1s linear infinite;
+}
+
+@keyframes review-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.review-loading-text {
+  text-align: center;
+}
+
+.review-loading-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.review-loading-step {
+  margin-top: 6px;
   font-size: 13px;
+  color: var(--text-secondary);
+  animation: step-fade 0.5s ease;
+}
+
+@keyframes step-fade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .review-score-row {

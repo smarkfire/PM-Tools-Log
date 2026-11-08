@@ -13,7 +13,7 @@
                 标准：别人不看代码、不开会，也能知道你这天<strong>干了什么、干到什么程度、明天从哪继续</strong>。AI 按此规范检查并打分（满分 100），<strong>达到 80 分</strong>才能生成定稿。
               </p>
               <p class="tips-structure-title">标准日志模板（Markdown 层级）：</p>
-              <pre class="tips-template"># 张三 2026-11-07 的日志
+              <pre class="tips-template"># 2026-11-07 张三 的日志
 ## 项目名称：{项目名称}
 - 投入时长：X小时
 ### 小组名称：{小组名称}
@@ -288,8 +288,20 @@
     </el-row>
 
     <!-- 保存前二次质检：展示分数与修改建议，确认保存或返回修改 -->
-    <el-dialog v-model="reviewVisible" title="保存前二次质检" width="min(92vw, 520px)" top="8vh">
-      <div v-if="!reviewResult" v-loading="reviewing" class="review-loading">AI 正在复检日志，请稍候…</div>
+    <el-dialog
+      v-model="reviewVisible"
+      title="保存前二次质检"
+      width="min(92vw, 520px)"
+      top="8vh"
+      :close-on-click-modal="false"
+    >
+      <div v-if="!reviewResult" class="review-loading">
+        <el-icon class="review-spin"><Loading /></el-icon>
+        <div class="review-loading-text">
+          <div class="review-loading-title">AI 正在复检日志…</div>
+          <div class="review-loading-step">{{ reviewStep }}</div>
+        </div>
+      </div>
       <template v-else>
         <div class="review-head">
           <span class="review-score" :class="scoreClass(reviewResult.score)">
@@ -311,7 +323,7 @@
         </div>
       </template>
       <template #footer>
-        <el-button @click="reviewVisible = false">返回修改</el-button>
+        <el-button @click="cancelReview">返回修改</el-button>
         <el-button type="success" :loading="saving" :disabled="!reviewResult" @click="doSave">
           <el-icon><Check /></el-icon>确认保存
         </el-button>
@@ -321,7 +333,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { chatApi, logApi, projectApi, todoApi, type TodoItem } from '../../api';
@@ -636,6 +648,7 @@ async function saveLog() {
   reviewing.value = true;
   reviewResult.value = null;
   reviewVisible.value = true;
+  startReviewSteps();
   try {
     const res = await logApi.review({
       date: logDate.value,
@@ -643,7 +656,9 @@ async function saveLog() {
       provider: provider.value,
     });
     reviewResult.value = res.data;
+    stopReviewSteps();
   } catch (e: any) {
+    stopReviewSteps();
     reviewVisible.value = false;
     const msg = e?.response?.data?.message || e?.message || '网络异常';
     try {
@@ -678,6 +693,42 @@ function scoreClass(s: number | null | undefined) {
   if (s >= 60) return 'score-mid';
   return 'score-low';
 }
+
+// 复检动作提示：轮换展示当前正在做的步骤
+const REVIEW_STEPS = [
+  '正在解析日志结构…',
+  '正在逐项核对好日志规范…',
+  '正在评估事项质量与量化成果…',
+  '正在计算质量得分…',
+];
+const reviewStep = ref(REVIEW_STEPS[0]);
+let reviewStepTimer: number | undefined;
+
+function startReviewSteps() {
+  stopReviewSteps();
+  let i = 0;
+  reviewStep.value = REVIEW_STEPS[0];
+  reviewStepTimer = window.setInterval(() => {
+    i = Math.min(i + 1, REVIEW_STEPS.length - 1);
+    reviewStep.value = REVIEW_STEPS[i];
+  }, 2600);
+}
+
+function stopReviewSteps() {
+  if (reviewStepTimer) {
+    clearInterval(reviewStepTimer);
+    reviewStepTimer = undefined;
+  }
+}
+
+/** 复检中点击"返回修改"：关闭弹窗并复位状态 */
+function cancelReview() {
+  reviewVisible.value = false;
+  reviewing.value = false;
+  stopReviewSteps();
+}
+
+onUnmounted(stopReviewSteps);
 
 async function doSave() {
   // 原始内容：保留待办执行情况作为原始依据
@@ -1240,10 +1291,51 @@ async function doSave() {
 .review-loading {
   min-height: 120px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: var(--text-secondary, #909399);
+  gap: 14px;
+  padding: 10px 0;
+}
+
+.review-spin {
+  font-size: 38px;
+  color: var(--primary-color, #409eff);
+  animation: review-rotate 1s linear infinite;
+}
+
+@keyframes review-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.review-loading-text {
+  text-align: center;
+}
+
+.review-loading-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.review-loading-step {
+  margin-top: 6px;
   font-size: 13px;
+  color: var(--text-secondary);
+  animation: step-fade 0.5s ease;
+}
+
+@keyframes step-fade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .review-head {
