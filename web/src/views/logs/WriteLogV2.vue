@@ -14,9 +14,9 @@
               </p>
               <p class="tips-structure-title">标准日志模板（Markdown 层级）：</p>
               <pre class="tips-template"># 张三 2026-11-07 的日志
-## {项目名称}
+## 项目名称：{项目名称}
 - 投入时长：X小时
-### {小组名称}
+### 小组名称：{小组名称}
 - {做了什么，有什么成果}
 ## 明日计划
 - {后续工作安排}
@@ -24,8 +24,8 @@
 - {卡点或需要的协助}</pre>
               <ol>
                 <li><strong>一级标题</strong>：谁的哪天的日志</li>
-                <li><strong>二级标题</strong>：项目名称（下写当天总投入时长）、明日计划、问题与风险</li>
-                <li><strong>三级标题</strong>：小组名称，组下逐条写事项</li>
+                <li><strong>二级标题</strong>："项目名称：xxx"（下写当天总投入时长）、明日计划、问题与风险</li>
+                <li><strong>三级标题</strong>："小组名称：xxx"，组下逐条写事项</li>
                 <li><strong>每条事项</strong>：写清"做了什么、有什么成果"，对象融进句子（模块、页面、接口、文档、Bug 号），带进展状态，尽量量化</li>
               </ol>
               <p class="tips-structure-title">事项怎么写算好？公式：进展 + 对象 + 动作 + 成果：</p>

@@ -249,10 +249,11 @@ function formatDateOnly(d?: string) {
   return d ? d.slice(0, 10) : '-';
 }
 
-/** 从内容二级标题提取涉及的项目（排除固定章节） */
+/** 从内容二级标题提取涉及的项目（去掉"项目名称："前缀，排除固定章节，兼容旧格式） */
 const FIXED_SECTIONS = ['明日计划', '问题与风险'];
 function extractProjects(log: WorkLog): string[] {
-  const names = (logText(log).match(/^##\s+(.+)$/gm) || []).map((l) => l.replace(/^##\s+/, '').trim());
+  const names = (logText(log).match(/^##\s+(.+)$/gm) || [])
+    .map((l) => l.replace(/^##\s+/, '').replace(/^项目名称[:：]\s*/, '').trim());
   return [...new Set(names.filter((n) => n && !FIXED_SECTIONS.includes(n)))];
 }
 
