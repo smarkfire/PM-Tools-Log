@@ -526,6 +526,86 @@ export async function assistLog(req: Request, res: Response) {
   res.end();
 }
 
+/**
+ * 新版填报：保存前二次质检（只打分 + 给修改建议，不改写日志）
+ * POST /api/logs/assist/review
+ * body: { date, content, provider }
+ * 返回: { score, summary, suggestions }
+ */
+export async function reviewLog(req: Request, res: Response) {
+  const userId = req.authUser!.id;
+  const { date, content, provider } = req.body || {};
+  if (!content || !String(content).trim()) {
+    res.status(400).json(fail('日志内容为空，无法质检'));
+    return;
+  }
+  const aiProvider: AiProvider = provider === 'deepseek' ? 'deepseek' : 'qwen';
+
+  const systemPrompt = await getEffectivePrompt(userId, 'log_review');
+  if (!systemPrompt) {
+    res.status(500).json(fail('系统提示词未配置，请联系管理员初始化'));
+    return;
+  }
+
+  const me = await queryOne<{ display_name: string }>(
+    'SELECT display_name FROM users WHERE id = $1',
+    [userId]
+  );
+  const displayName = me?.display_name || '我';
+  const userAiConfig = await getUserAiConfig(userId);
+
+  const messages: ChatMessage[] = [
+    { role: 'system', content: systemPrompt },
+    {
+      role: 'user',
+      content: [
+        '【任务模式：保存前二次质检】这次不要生成、也不要改写日志，只对下面这篇已确认的日志终稿做一次严格的质量复检。',
+        '按系统提示词中的《好日志规范》与评分标准重新打分，并给出具体、可执行的修改建议（完全达标则给出通过结论）。',
+        '思考过程后，用一行 ===JSON=== 分隔，输出 JSON：',
+        '{"score":分数,"summary":"一句话总评","suggestions":["建议1","建议2"]}',
+        '要求：score 为 0~100 整数；suggestions 每条具体到条目与改法（引用原文说明改哪里、怎么改），最多 5 条，完全达标可为空数组；不要输出日志改写稿。',
+        '',
+        `【作者】${displayName}；【日志日期】${date || '今天'}`,
+        '【日志终稿】',
+        String(content),
+      ].join('\n'),
+    },
+  ];
+
+  try {
+    const full = await chat(aiProvider, messages, {
+      temperature: 0.2,
+      override: aiProvider === 'qwen' ? userAiConfig.qwen : userAiConfig.deepseek,
+    });
+    const SEP = '===JSON===';
+    const sepIdx = full.indexOf(SEP);
+    const jsonText = sepIdx >= 0 ? full.slice(sepIdx + SEP.length) : full;
+    let text = jsonText.trim();
+    const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fence) text = fence[1].trim();
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start >= 0 && end > start) text = text.slice(start, end + 1);
+    let score: number | null = null;
+    let summary = '';
+    let suggestions: string[] = [];
+    try {
+      const obj = JSON.parse(text);
+      score = typeof obj.score === 'number' ? Math.min(100, Math.max(0, Math.round(obj.score))) : null;
+      summary = String(obj.summary || '');
+      suggestions = Array.isArray(obj.suggestions)
+        ? obj.suggestions.map((s: unknown) => String(s)).filter(Boolean).slice(0, 5)
+        : [];
+    } catch {
+      // 解析失败：把思考过程截取为总评，避免整次质检作废
+      summary = (sepIdx >= 0 ? full.slice(0, sepIdx) : full).trim().slice(0, 300) || 'AI 返回格式异常，请参考对话区检查结果判断';
+    }
+    res.json(success({ score, summary, suggestions }));
+  } catch (e: any) {
+    res.status(500).json(fail(e?.message || 'AI 调用失败'));
+  }
+}
+
 /** 解析 AI 返回的 JSON（容错：剥离围栏 / 多余文字） */
 function parseAssistResult(raw: string): {
   action: 'continue' | 'done';

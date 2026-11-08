@@ -46,6 +46,7 @@ router.post('/logs', authMiddleware, wrap(logController.saveLog));
 router.delete('/logs/:id', authMiddleware, wrap(logController.deleteLog));
 router.post('/logs/optimize', authMiddleware, wrap(logController.optimizeLog));
 router.post('/logs/assist', authMiddleware, wrap(logController.assistLog));
+router.post('/logs/assist/review', authMiddleware, wrap(logController.reviewLog));
 
 // ==================== 今日待办（新填报流程） ====================
 router.get('/todos/history', authMiddleware, wrap(todoController.listTodoHistory));

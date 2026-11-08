@@ -56,7 +56,13 @@
     <el-card shadow="never" v-loading="loading">
       <!-- 卡片视图 -->
       <div v-if="viewMode === 'card'" class="log-cards">
-        <div v-for="log in logs" :key="log.id" class="log-card" @click="viewLog(log)">
+        <div
+          v-for="log in logs"
+          :key="log.id"
+          class="log-card"
+          :class="accentClass(log.ai_score)"
+          @click="viewLog(log)"
+        >
           <div class="card-top">
             <span class="card-date">{{ formatDateOnly(log.log_date) }}</span>
             <span class="score-badge" :class="scoreClass(log.ai_score)">
@@ -89,21 +95,6 @@
         <el-table :data="logs" stripe>
           <el-table-column prop="log_date" label="日志日期" width="110">
             <template #default="{ row }">{{ formatDateOnly(row.log_date) }}</template>
-          </el-table-column>
-          <el-table-column label="项目" min-width="150">
-            <template #default="{ row }">
-              <template v-if="extractProjects(row).length">
-                <el-tag
-                  v-for="p in extractProjects(row).slice(0, 2)"
-                  :key="p"
-                  size="small"
-                  effect="light"
-                  style="margin-right: 4px"
-                >{{ p }}</el-tag>
-                <span v-if="extractProjects(row).length > 2" class="text-muted">+{{ extractProjects(row).length - 2 }}</span>
-              </template>
-              <span v-else class="text-muted">-</span>
-            </template>
           </el-table-column>
           <el-table-column label="得分" width="90">
             <template #default="{ row }">
@@ -282,6 +273,14 @@ function scoreClass(s: number | null) {
   return 'score-low';
 }
 
+/** 卡片左侧色条按得分着色 */
+function accentClass(s: number | null) {
+  if (s == null) return 'accent-none';
+  if (s >= 80) return 'accent-high';
+  if (s >= 60) return 'accent-mid';
+  return 'accent-low';
+}
+
 async function loadLogs() {
   loading.value = true;
   try {
@@ -324,22 +323,47 @@ onMounted(loadLogs);
 /* ==================== 卡片视图 ==================== */
 .log-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
 }
 
 .log-card {
+  position: relative;
+  overflow: hidden;
   background: var(--bg-card, #fff);
   border: 1px solid var(--border-lighter, #ebeef5);
   border-radius: 12px;
-  padding: 14px 16px;
+  padding: 16px 18px 14px 22px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  min-height: 150px;
+  gap: 10px;
+  min-height: 158px;
   box-shadow: var(--shadow-sm);
   transition: box-shadow 0.2s, transform 0.2s, border-color 0.2s;
+}
+
+/* 左侧得分色条 */
+.log-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: #d4d7de;
+}
+
+.log-card.accent-high::before {
+  background: #2e9e5b;
+}
+
+.log-card.accent-mid::before {
+  background: #cf8a2a;
+}
+
+.log-card.accent-low::before {
+  background: #d65a5a;
 }
 
 .log-card:hover {
@@ -355,7 +379,7 @@ onMounted(loadLogs);
 }
 
 .card-date {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -401,8 +425,9 @@ onMounted(loadLogs);
   flex: 1;
   overflow: hidden;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+  min-height: 42px;
 }
 
 .card-foot {

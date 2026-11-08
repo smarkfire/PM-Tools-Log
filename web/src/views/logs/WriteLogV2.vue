@@ -175,7 +175,7 @@
                     :disabled="!m.logResult.content"
                     @click="saveLog()"
                   >
-                    <el-icon><Check /></el-icon>确认保存日志
+                    <el-icon><Check /></el-icon>质检并保存
                   </el-button>
                 </div>
               </div>
@@ -241,6 +241,37 @@
       </el-col>
     </el-row>
 
+    <!-- 保存前二次质检：展示分数与修改建议，确认保存或返回修改 -->
+    <el-dialog v-model="reviewVisible" title="保存前二次质检" width="min(92vw, 520px)" top="8vh">
+      <div v-if="!reviewResult" v-loading="reviewing" class="review-loading">AI 正在复检日志，请稍候…</div>
+      <template v-else>
+        <div class="review-head">
+          <span class="review-score" :class="scoreClass(reviewResult.score)">
+            {{ reviewResult.score != null ? reviewResult.score + ' 分' : '未评分' }}
+          </span>
+          <span v-if="reviewResult.score != null" class="review-pass">
+            {{ reviewResult.score >= 80 ? '已达到 80 分保存标准' : '未达到 80 分标准，建议返回修改' }}
+          </span>
+        </div>
+        <div v-if="reviewResult.summary" class="review-summary">{{ reviewResult.summary }}</div>
+        <template v-if="reviewResult.suggestions.length">
+          <div class="review-sug-title">修改建议：</div>
+          <ul class="review-sug-list">
+            <li v-for="(s, i) in reviewResult.suggestions" :key="i">{{ s }}</li>
+          </ul>
+        </template>
+        <div v-else class="review-sug-title" style="color: var(--el-color-success)">
+          AI 未发现需要修改的问题。
+        </div>
+      </template>
+      <template #footer>
+        <el-button @click="reviewVisible = false">返回修改</el-button>
+        <el-button type="success" :loading="saving" :disabled="!reviewResult" @click="doSave">
+          <el-icon><Check /></el-icon>确认保存
+        </el-button>
+      </template>
+    </el-dialog>
+
     <!-- 我的日志（最近 5 条，内容可折叠） -->
     <el-drawer v-model="logsDrawerVisible" title="我的日志（最近 5 条）" size="480px">
       <div v-if="recentLogs.length" class="recent-logs">
@@ -274,7 +305,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { chatApi, logApi, todoApi, type TodoItem } from '../../api';
 import { currentWeekMonday } from '../../utils/date';
 import MdPreview from '../../components/MdPreview.vue';
@@ -548,7 +579,52 @@ async function saveLog() {
     ElMessage.warning('请先生成日志');
     return;
   }
-  await doSave();
+  if (reviewing.value) return;
+  // 保存前先做二次质检，弹窗展示分数与修改建议，由用户决定确认保存或返回修改
+  reviewing.value = true;
+  reviewResult.value = null;
+  reviewVisible.value = true;
+  try {
+    const res = await logApi.review({
+      date: logDate.value,
+      content: result.value.content,
+      provider: provider.value,
+    });
+    reviewResult.value = res.data;
+  } catch (e: any) {
+    reviewVisible.value = false;
+    const msg = e?.response?.data?.message || e?.message || '网络异常';
+    try {
+      await ElMessageBox.confirm(`二次质检失败（${msg}），是否跳过质检直接保存？`, '提示', {
+        type: 'warning',
+        confirmButtonText: '直接保存',
+        cancelButtonText: '取消',
+      });
+      await doSave();
+    } catch {
+      // 用户取消
+    }
+  } finally {
+    reviewing.value = false;
+  }
+}
+
+// ==================== 保存前二次质检 ====================
+interface ReviewResult {
+  score: number | null;
+  summary: string;
+  suggestions: string[];
+}
+const reviewVisible = ref(false);
+const reviewing = ref(false);
+const reviewResult = ref<ReviewResult | null>(null);
+
+/** 得分配色：≥80 绿 / ≥60 橙 / <60 红 */
+function scoreClass(s: number | null | undefined) {
+  if (s == null) return 'score-none';
+  if (s >= 80) return 'score-high';
+  if (s >= 60) return 'score-mid';
+  return 'score-low';
 }
 
 async function doSave() {
@@ -570,6 +646,7 @@ async function doSave() {
       aiScore: result.value!.score ?? undefined,
     });
     ElMessage.success('日志保存成功');
+    reviewVisible.value = false;
     router.push('/logs/v2');
   } catch (e: any) {
     ElMessage.error('保存失败：' + (e?.response?.data?.message || e?.message || '网络异常'));
@@ -1091,5 +1168,78 @@ async function doSave() {
   .todo-list {
     max-height: 300px;
   }
+}
+
+/* ==================== 保存前二次质检弹窗 ==================== */
+.review-loading {
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary, #909399);
+  font-size: 13px;
+}
+
+.review-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.review-score {
+  font-size: 15px;
+  font-weight: 600;
+  padding: 3px 14px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.score-high {
+  background: #e8f7ee;
+  color: #2e9e5b;
+}
+
+.score-mid {
+  background: #fdf3e7;
+  color: #cf8a2a;
+}
+
+.score-low {
+  background: #fdeaea;
+  color: #d65a5a;
+}
+
+.score-none {
+  background: #f0f2f5;
+  color: #909399;
+}
+
+.review-pass {
+  font-size: 13px;
+  color: var(--text-regular, #606266);
+}
+
+.review-summary {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-regular, #606266);
+  background: var(--el-fill-color-light, #f5f7fa);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.review-sug-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 12px 0 6px;
+}
+
+.review-sug-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--text-regular, #606266);
 }
 </style>

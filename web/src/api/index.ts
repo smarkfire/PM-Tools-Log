@@ -101,6 +101,12 @@ export const logApi = {
     history?: { role: 'user' | 'assistant'; content: string }[];
     provider?: string;
   }) => request.post<AssistResult>('/logs/assist', data),
+  /** 新版填报：保存前二次质检（打分 + 修改建议，不改写日志） */
+  review: (data: { date: string; content: string; provider?: string }) =>
+    request.post<{ score: number | null; summary: string; suggestions: string[] }>(
+      '/logs/assist/review',
+      data
+    ),
   /**
    * 新版填报：流式 AI 生成（SSE）
    * onThink 实时回调思考过程增量文本；onFinal 返回结构化检查结果；onError 返回错误信息
