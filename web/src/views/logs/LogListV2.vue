@@ -14,9 +14,6 @@
             <el-icon style="margin-right: 4px; vertical-align: -2px"><List /></el-icon>列表
           </el-radio-button>
         </el-radio-group>
-        <el-button type="primary" @click="$router.push('/logs/write-v2')">
-          <el-icon><EditPen /></el-icon>填写日志
-        </el-button>
       </div>
     </div>
 
@@ -48,6 +45,9 @@
         <el-form-item>
           <el-button type="primary" @click="loadLogs">
             <el-icon><Search /></el-icon>查询
+          </el-button>
+          <el-button type="success" @click="$router.push('/logs/write-v2')">
+            <el-icon><EditPen /></el-icon>填写日志
           </el-button>
         </el-form-item>
       </el-form>
