@@ -93,6 +93,8 @@ export interface WorkLog {
   group_marks?: LogGroupMark[];
   /** 跨周修改申请状态：none=未申请 pending=待审批 approved=已通过（可编辑一次） */
   edit_approval_status?: 'none' | 'pending' | 'approved';
+  /** 最近更新时间（编辑保存后刷新） */
+  updated_at?: string;
 }
 
 export interface LogStats {

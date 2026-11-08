@@ -78,7 +78,7 @@
             <el-tag v-if="log.ai_provider" size="small" :type="log.ai_provider === 'qwen' ? 'primary' : 'success'">
               {{ log.ai_provider === 'qwen' ? '千问' : 'DS' }}
             </el-tag>
-            <span class="card-time">{{ formatDateTime(log.created_at) }}</span>
+            <span class="card-time">{{ formatDateTime(dataTime(log)) }}</span>
           </div>
           <div v-if="isMine(log)" class="card-actions" @click.stop>
             <el-button v-if="canDirectEdit(log)" link type="primary" size="small" @click="handleEdit(log)">编辑</el-button>
@@ -128,7 +128,7 @@
           </el-table-column>
           <el-table-column label="数据时间" width="160">
             <template #default="{ row }">
-              <span class="log-datetime">{{ formatDateTime(row.created_at) }}</span>
+              <span class="log-datetime">{{ formatDateTime(dataTime(row)) }}</span>
             </template>
           </el-table-column>
           <el-table-column label="操作" width="170" fixed="right">
@@ -212,7 +212,7 @@
             <span v-else>-</span>
           </el-descriptions-item>
           <el-descriptions-item label="数据时间" :span="isMobile ? 1 : 2">
-            {{ formatDateTime(currentLog.created_at) }}
+            {{ formatDateTime(dataTime(currentLog)) }}
           </el-descriptions-item>
         </el-descriptions>
 
@@ -388,6 +388,12 @@ function scoreClass(s: number | null) {
   if (s >= 80) return 'score-high';
   if (s >= 60) return 'score-mid';
   return 'score-low';
+}
+
+/** 数据时间：编辑保存过后显示最新更新时间，否则显示创建时间 */
+function dataTime(log: WorkLog) {
+  const u = log.updated_at;
+  return u && u !== log.created_at ? u : log.created_at;
 }
 
 /** 卡片左侧色条按得分着色 */
