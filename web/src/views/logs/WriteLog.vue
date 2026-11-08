@@ -237,19 +237,47 @@
             type="success"
             size="large"
             style="width: 100%"
-            :loading="saving"
+            :loading="reviewing || saving"
             :disabled="!form.content?.trim() || !form.projectId"
             @click="handleSave"
           >
             <el-icon><Check /></el-icon>
-            保存日志
+            {{ reviewing ? 'AI 质检中...' : saving ? '保存中...' : '质检并保存' }}
           </el-button>
           <div class="save-tip">
-            保存时将同时提交原始内容与优化后内容
+            保存前先进行 AI 质量检查打分，确认后存档；优化内容与质检分数将一并保存
           </div>
         </el-card>
       </el-col>
     </el-row>
+
+    <!-- 保存前质量检查结果 -->
+    <el-dialog v-model="reviewVisible" title="保存前质量检查" width="min(92vw, 520px)" top="8vh">
+      <div v-if="!reviewResult" v-loading="reviewing" class="review-loading">AI 正在质检日志，请稍候…</div>
+      <template v-else>
+        <div class="review-score-row">
+          <span class="review-score" :class="scoreClass(reviewResult.score)">
+            {{ reviewResult.score != null ? reviewResult.score + ' 分' : '未评分' }}
+          </span>
+          <span v-if="reviewResult.score != null" class="review-pass">
+            {{ reviewResult.score >= 80 ? '已达到 80 分保存标准' : '未达到 80 分标准，建议返回修改' }}
+          </span>
+        </div>
+        <div v-if="reviewResult.summary" class="review-summary">{{ reviewResult.summary }}</div>
+        <template v-if="reviewResult.suggestions.length">
+          <div class="review-sug-title">修改建议：</div>
+          <ol class="review-sugs">
+            <li v-for="(s, i) in reviewResult.suggestions" :key="i">{{ s }}</li>
+          </ol>
+        </template>
+      </template>
+      <template #footer>
+        <el-button @click="reviewVisible = false">返回修改</el-button>
+        <el-button type="success" :loading="saving" :disabled="!reviewResult" @click="doSave">
+          确认保存
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -300,6 +328,21 @@ const optimizedContent = ref('');
 const resultView = ref<'edit' | 'preview'>('preview');
 const optimizing = ref(false);
 const saving = ref(false);
+
+// ===== 保存前质量检查 =====
+const reviewing = ref(false);
+const reviewVisible = ref(false);
+const reviewResult = ref<{ score: number | null; summary: string; suggestions: string[] } | null>(
+  null
+);
+
+/** 质检分数徽章配色 */
+function scoreClass(s: number | null | undefined) {
+  if (s == null) return 'score-none';
+  if (s >= 80) return 'score-high';
+  if (s >= 60) return 'score-mid';
+  return 'score-low';
+}
 
 // ===== 跨组协作：涉及小组多选（工时不再按组分配，统一记当天总工时） =====
 const groupSelection = ref<number[]>([]);
@@ -445,6 +488,35 @@ async function handleSave() {
       return; // 关闭弹窗视为取消保存
     }
   }
+  // 开始质检：弹窗内展示进度，完成后由用户确认保存或返回修改
+  reviewing.value = true;
+  reviewResult.value = null;
+  reviewVisible.value = true;
+  try {
+    const res = await logApi.review({
+      date: form.logDate,
+      content: optimizedContent.value?.trim() || form.content,
+      provider: aiProvider.value,
+    });
+    reviewResult.value = res.data;
+  } catch {
+    // 质检失败：关闭弹窗，由用户选择是否跳过直接保存
+    reviewVisible.value = false;
+    try {
+      await ElMessageBox.confirm('AI 质检服务暂时不可用，是否跳过质检直接保存？', '质检失败', {
+        type: 'warning',
+        confirmButtonText: '直接保存',
+        cancelButtonText: '取消',
+      });
+    } catch {
+      return;
+    }
+    await doSave(); // 跳过质检，无分数直接保存
+  }
+}
+
+/** 质检确认后的真正保存（质检分数随日志一并入库） */
+async function doSave() {
   saving.value = true;
   try {
     await logApi.save({
@@ -458,7 +530,9 @@ async function handleSave() {
         groupId: gid,
         hours: null,
       })),
+      aiScore: reviewResult.value?.score ?? undefined,
     });
+    reviewVisible.value = false;
     ElMessage.success('日志保存成功');
     if (isEdit.value) {
       // 编辑模式：保存后返回日志列表
@@ -474,8 +548,23 @@ async function handleSave() {
 </script>
 
 <style scoped>
+/* 卡片标题装饰条（与项目详情等页面风格统一） */
 .card-title {
+  position: relative;
   font-weight: 600;
+  padding-left: 10px;
+}
+
+.card-title::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 14px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #409eff, #7b5cff);
 }
 
 .optimize-card {
@@ -490,6 +579,9 @@ async function handleSave() {
 
 .ai-settings {
   margin-bottom: 14px;
+  padding: 10px 12px;
+  background: var(--bg-page, #f5f7fa);
+  border-radius: 8px;
 }
 
 .ai-warning {
@@ -542,6 +634,79 @@ async function handleSave() {
   color: var(--text-secondary);
   text-align: center;
   margin-top: 8px;
+}
+
+/* ==================== 保存前质量检查弹窗 ==================== */
+.review-loading {
+  min-height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.review-score-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.review-score {
+  font-size: 22px;
+  font-weight: 700;
+  padding: 4px 16px;
+  border-radius: 999px;
+}
+
+.score-high {
+  background: #e8f7ee;
+  color: #2e9e5b;
+}
+
+.score-mid {
+  background: #fdf3e7;
+  color: #cf8a2a;
+}
+
+.score-low {
+  background: #fdeaea;
+  color: #d65a5a;
+}
+
+.score-none {
+  background: #f0f2f5;
+  color: #909399;
+}
+
+.review-pass {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.review-summary {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-regular);
+  background: var(--bg-page, #f5f7fa);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+
+.review-sug-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 4px 0;
+}
+
+.review-sugs {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--text-regular);
+  line-height: 1.8;
 }
 
 /* ==================== 填写要点气泡（与新版一致） ==================== */

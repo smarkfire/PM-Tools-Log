@@ -402,7 +402,11 @@ async function loadLogs() {
       projectId: query.projectId || undefined,
     };
     if (isTeam.value && query.userId) params.userId = query.userId;
-    if (!isTeam.value) params.userId = userStore.user?.id;
+    if (!isTeam.value) {
+      params.userId = userStore.user?.id;
+      // 旧版"我的日志"只展示旧版填报（v1）的日志；新版对话式日志在"我的日志·新版"查看
+      params.source = 'v1';
+    }
     if (dateRange.value) {
       params.startDate = dateRange.value[0];
       params.endDate = dateRange.value[1];
