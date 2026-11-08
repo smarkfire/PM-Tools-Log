@@ -523,7 +523,32 @@ export async function assistLog(req: Request, res: Response) {
     }
     const sepIdx = full.indexOf(SEP);
     const jsonText = sepIdx >= 0 ? full.slice(sepIdx + SEP.length) : full;
-    send({ type: 'final', data: parseAssistResult(jsonText) });
+    const parsed = parseAssistResult(jsonText);
+    // 程序化兜底：AI 判定完成但日志缺小组三级标题时，强制转为提问（不依赖模型自觉遵守提示词）
+    if (parsed.action === 'done' && parsed.result) {
+      const content: string = parsed.result.content || '';
+      const projectsInLog = parsed.result.projects || [];
+      const hasGroupTitle = /###\s*(?:小组名称\s*[:：])/.test(content);
+      if (!hasGroupTitle && projectsInLog.length > 0) {
+        const candidateGroups = new Set<string>();
+        for (const pn of projectsInLog) {
+          const p = myProjects.find((mp) => mp.name === pn);
+          if (p?.groups) p.groups.split('、').forEach((g) => g.trim() && candidateGroups.add(g.trim()));
+        }
+        if (candidateGroups.size > 0) {
+          parsed.action = 'continue';
+          parsed.questions = [
+            {
+              field: 'group',
+              question: '日志缺少小组信息：这项工作属于哪个小组？',
+              options: [...candidateGroups],
+            },
+          ];
+          parsed.result = null;
+        }
+      }
+    }
+    send({ type: 'final', data: parsed });
   } catch (e: any) {
     send({ type: 'error', message: e?.message || 'AI 调用失败' });
   }
@@ -624,7 +649,7 @@ function parseAssistResult(raw: string): {
   score: number | null;
   summary: string;
   questions: { field: string; question: string; options: string[] }[];
-  result: { project?: string; content: string; hours: number | null; groups: { name: string; hours: number | null }[] } | null;
+  result: { project?: string; content: string; hours: number | null; groups: { name: string; hours: number | null }[]; projects: string[] } | null;
 } {
   let text = raw.trim();
   const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -647,6 +672,7 @@ function parseAssistResult(raw: string): {
             content: String(result.content || ''),
             hours: typeof result.hours === 'number' ? result.hours : null,
             groups: Array.isArray(result.groups) ? result.groups : [],
+            projects: Array.isArray(result.projects) ? result.projects.map(String) : [],
           }
         : null,
     };
@@ -657,7 +683,7 @@ function parseAssistResult(raw: string): {
       score: null,
       summary: 'AI 结果解析失败，已将原文作为日志内容',
       questions: [],
-      result: { project: '', content: raw, hours: null, groups: [] },
+      result: { project: '', content: raw, hours: null, groups: [], projects: [] },
     };
   }
 }
