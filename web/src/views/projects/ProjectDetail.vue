@@ -1,15 +1,38 @@
 <template>
   <div class="page-container" v-if="project">
-    <div class="page-header">
-      <el-button link @click="$router.back()" class="back-btn">
-        <el-icon><ArrowLeft /></el-icon>返回
-      </el-button>
-      <div class="page-title">{{ project.name }}</div>
-      <div class="page-desc">
-        {{ project.description || '暂无描述' }}
-        <el-tag :type="project.status === 'active' ? 'success' : 'info'" size="small" style="margin-left: 8px">
-          {{ project.status === 'active' ? '进行中' : '已归档' }}
-        </el-tag>
+    <div class="page-hero">
+      <div class="hero-top">
+        <el-button link class="hero-back" @click="$router.back()">
+          <el-icon><ArrowLeft /></el-icon>返回
+        </el-button>
+      </div>
+      <div class="hero-bottom">
+        <div class="hero-main">
+          <div class="hero-avatar">{{ project.name.slice(0, 1) }}</div>
+          <div class="hero-info">
+            <div class="hero-title">
+              {{ project.name }}
+              <span class="hero-status" :class="project.status === 'active' ? 'is-active' : 'is-archived'">
+                <i class="dot"></i>{{ project.status === 'active' ? '进行中' : '已归档' }}
+              </span>
+            </div>
+            <div class="hero-desc">{{ project.description || '暂无描述' }}</div>
+          </div>
+        </div>
+        <div class="hero-stats">
+          <div class="hero-stat">
+            <div class="stat-num">{{ project.members?.length || 0 }}</div>
+            <div class="stat-label">成员</div>
+          </div>
+          <div class="hero-stat">
+            <div class="stat-num">{{ project.groups?.length || 0 }}</div>
+            <div class="stat-label">小组</div>
+          </div>
+          <div class="hero-stat">
+            <div class="stat-num">{{ leaderCount }}</div>
+            <div class="stat-label">组长</div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -27,10 +50,15 @@
           </template>
 
           <el-table v-if="!isMobile" :data="project.members" stripe>
-            <el-table-column prop="displayName" label="姓名" width="120">
+            <el-table-column prop="displayName" label="姓名" min-width="140">
               <template #default="{ row }">
-                <span>{{ row.displayName }}</span>
-                <span class="text-muted">（{{ row.username }}）</span>
+                <div class="member-cell">
+                  <span class="member-avatar">{{ row.displayName.slice(0, 1) }}</span>
+                  <div class="member-cell-text">
+                    <div class="member-realname">{{ row.displayName }}</div>
+                    <div class="member-username">{{ row.username }}</div>
+                  </div>
+                </div>
               </template>
             </el-table-column>
             <el-table-column label="项目角色" width="130">
@@ -54,6 +82,7 @@
           <!-- 移动端成员列表 -->
           <div v-else class="mobile-member-list">
             <div v-for="m in project.members" :key="m.userId" class="mobile-member-item">
+              <span class="member-avatar">{{ m.displayName.slice(0, 1) }}</span>
               <div class="member-main">
                 <div class="member-name">
                   {{ m.displayName }}
@@ -86,15 +115,12 @@
 
           <div v-if="project.groups?.length">
             <div v-for="group in project.groups" :key="group.id" class="group-item item-card">
+              <div class="group-badge">{{ group.name.slice(0, 1) }}</div>
               <div class="group-info">
-                <div class="group-name">
-                  <el-icon><Collection /></el-icon>{{ group.name }}
-                </div>
+                <div class="group-name">{{ group.name }}</div>
                 <div class="group-leader">
                   组长：{{ group.leaderName || '未指定' }}
-                  <span class="group-count">
-                    （{{ memberCountOfGroup(group.id) }} 人）
-                  </span>
+                  <span class="group-count">· {{ memberCountOfGroup(group.id) }} 人</span>
                 </div>
               </div>
               <div v-if="canManage" class="group-actions">
@@ -297,6 +323,11 @@ const hasManager = computed(() =>
 function hasManagerOtherThan(userId: number) {
   return project.value?.members?.some((m) => m.projectRole === 'manager' && m.userId !== userId);
 }
+
+/** 组长人数（头部统计用） */
+const leaderCount = computed(
+  () => project.value?.members?.filter((m) => m.projectRole === 'leader').length || 0
+);
 
 function roleLabel(role: string) {
   const map: Record<string, string> = { manager: '项目经理', leader: '小组长', member: '组员' };
@@ -526,13 +557,210 @@ onMounted(loadProject);
 </script>
 
 <style scoped>
-.back-btn {
-  margin-bottom: 8px;
+/* ==================== 头部横幅 ==================== */
+.page-hero {
+  position: relative;
+  border-radius: 12px;
+  padding: 14px 26px 22px;
+  margin-bottom: 16px;
+  background: linear-gradient(120deg, #2b7de9 0%, #409eff 48%, #7c5cff 100%);
+  color: #fff;
+  overflow: hidden;
+}
+
+/* 装饰圆 */
+.page-hero::before,
+.page-hero::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.09);
+  pointer-events: none;
+}
+
+.page-hero::before {
+  width: 220px;
+  height: 220px;
+  right: -60px;
+  top: -120px;
+}
+
+.page-hero::after {
+  width: 140px;
+  height: 140px;
+  left: 34%;
+  bottom: -80px;
+}
+
+.hero-top {
+  margin-bottom: 10px;
+}
+
+.hero-back {
+  color: rgba(255, 255, 255, 0.85);
   font-size: 13px;
 }
 
+.hero-back:hover {
+  color: #fff;
+}
+
+.hero-bottom {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.hero-main {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.hero-avatar {
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.hero-info {
+  min-width: 0;
+}
+
+.hero-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.3;
+  flex-wrap: wrap;
+}
+
+.hero-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.hero-status .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #cfd8e3;
+}
+
+.hero-status.is-active .dot {
+  background: #67c23a;
+  box-shadow: 0 0 6px rgba(103, 194, 58, 0.9);
+}
+
+.hero-desc {
+  margin-top: 6px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hero-stats {
+  display: flex;
+  gap: 30px;
+  flex-shrink: 0;
+}
+
+.hero-stat {
+  text-align: center;
+}
+
+.hero-stat + .hero-stat {
+  border-left: 1px solid rgba(255, 255, 255, 0.25);
+  padding-left: 30px;
+}
+
+.stat-num {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.stat-label {
+  margin-top: 2px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+/* ==================== 卡片标题装饰 ==================== */
 .card-title {
   font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-title::before {
+  content: '';
+  width: 4px;
+  height: 14px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #409eff, #7c5cff);
+}
+
+/* ==================== 成员 ==================== */
+.member-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.member-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #ecf5ff;
+  color: #409eff;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.member-cell-text {
+  min-width: 0;
+}
+
+.member-realname {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.member-username {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 2px;
 }
 
 /* 移动端成员列表 */
@@ -544,7 +772,7 @@ onMounted(loadProject);
 .mobile-member-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
   padding: 10px 0;
   border-bottom: 1px solid var(--border-lighter);
 }
@@ -567,12 +795,28 @@ onMounted(loadProject);
   margin-top: 4px;
 }
 
-/* 小组 */
+/* ==================== 小组 ==================== */
 .group-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
   margin-bottom: 10px;
+  border-radius: 10px;
+}
+
+.group-badge {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #409eff, #7c5cff);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .group-actions {
@@ -581,10 +825,12 @@ onMounted(loadProject);
   flex-shrink: 0;
 }
 
+.group-info {
+  flex: 1;
+  min-width: 0;
+}
+
 .group-name {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
@@ -593,7 +839,7 @@ onMounted(loadProject);
 .group-leader {
   font-size: 12px;
   color: var(--text-secondary);
-  margin-top: 4px;
+  margin-top: 3px;
 }
 
 .group-count {
@@ -602,5 +848,32 @@ onMounted(loadProject);
 
 .edit-card {
   margin-top: 16px;
+}
+
+/* ==================== 移动端适配 ==================== */
+@media (max-width: 768px) {
+  .page-hero {
+    padding: 12px 18px 18px;
+  }
+
+  .hero-stats {
+    width: 100%;
+    justify-content: space-around;
+    gap: 0;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.22);
+  }
+
+  .hero-stat + .hero-stat {
+    border-left: none;
+    padding-left: 0;
+  }
+
+  .hero-desc {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
 }
 </style>
