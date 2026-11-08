@@ -96,11 +96,15 @@
           <el-avatar v-else :size="32" class="msg-avatar ai-avatar">AI</el-avatar>
           <div v-if="msg.role === 'user'" class="chat-bubble user">{{ msg.content }}</div>
           <div v-else class="chat-bubble assistant">
+            <div v-if="msg.think" class="think-block">
+              <div class="think-label">🤔 AI 思考过程</div>
+              <div class="think-text">{{ msg.think }}</div>
+            </div>
             <MdPreview :content="msg.content" />
           </div>
         </div>
 
-        <div v-if="aiThinking" class="message-row assistant">
+        <div v-if="aiThinking && !streamStarted" class="message-row assistant">
           <el-avatar :size="32" class="msg-avatar ai-avatar">AI</el-avatar>
           <div class="chat-bubble assistant thinking">
             <el-icon class="is-loading"><Loading /></el-icon>
@@ -183,6 +187,7 @@ const currentConversation = computed(() =>
 const messages = ref<ChatMessage[]>([]);
 const inputText = ref('');
 const aiThinking = ref(false);
+const streamStarted = ref(false); // 是否已收到首个流式分块（收到后隐藏"AI 思考中"占位）
 const drawerVisible = ref(false);
 const provider = ref<'qwen' | 'deepseek'>('qwen');
 const providers = reactiveProviders();
@@ -287,8 +292,41 @@ async function sendMessage(text: string) {
   scrollToBottom();
 
   aiThinking.value = true;
+  streamStarted.value = false;
   try {
-    await chatApi.send(currentConvId.value!, { content: text, provider: provider.value });
+    // 流式接收：先收思考过程，再收正文，实时渲染到本地临时消息上
+    const liveMsg: ChatMessage = {
+      id: Date.now() + 1,
+      conversation_id: currentConvId.value!,
+      role: 'assistant',
+      content: '',
+      think: '',
+      created_at: new Date().toISOString(),
+    };
+    let liveAdded = false;
+    const ensureLive = () => {
+      if (!liveAdded) {
+        liveAdded = true;
+        streamStarted.value = true;
+        messages.value.push(liveMsg);
+      }
+    };
+    await chatApi.sendStream(currentConvId.value!, { content: text, provider: provider.value }, {
+      onThink: (t) => {
+        ensureLive();
+        liveMsg.think = (liveMsg.think || '') + t;
+        if (stickToBottom) scrollToBottom();
+      },
+      onContent: (t) => {
+        ensureLive();
+        liveMsg.content += t;
+        if (stickToBottom) scrollToBottom();
+      },
+      onDone: () => {},
+      onError: (m) => {
+        ElMessage.error(m);
+      },
+    });
     // 重新拉取消息，保证顺序与内容准确
     const res = await chatApi.messages(currentConvId.value!);
     messages.value = res.data || [];
@@ -298,6 +336,7 @@ async function sendMessage(text: string) {
     if (stickToBottom) scrollToBottom();
   } finally {
     aiThinking.value = false;
+    streamStarted.value = false;
   }
 }
 
@@ -533,6 +572,32 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
   color: var(--text-secondary);
+}
+
+/* AI 思考过程块 */
+.think-block {
+  background: rgba(0, 0, 0, 0.035);
+  border-left: 3px solid #c0c4cc;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  font-size: 12.5px;
+  color: var(--text-secondary, #909399);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.think-label {
+  font-weight: 600;
+  font-size: 12px;
+  margin-bottom: 4px;
+  color: var(--text-regular, #a8abb2);
+}
+
+.think-text {
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.6;
 }
 
 /* 输入区 */

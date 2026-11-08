@@ -12,7 +12,7 @@ import { Request, Response } from 'express';
 import { queryMany, queryOne } from '../config/db';
 import { success, fail } from '../utils/response';
 import { getDataScope } from '../services/permission.service';
-import { chat, AiProvider, ChatMessage } from '../services/ai.service';
+import { chat, chatStream, AiProvider, ChatMessage } from '../services/ai.service';
 import { getUserAiConfig } from '../services/config.service';
 import { getEffectivePrompt } from '../services/prompt.service';
 import { env } from '../config/env';
@@ -212,6 +212,112 @@ export async function sendMessage(req: Request, res: Response) {
   }
 
   res.json(success({ reply: assistantMsg, provider: aiProvider }));
+}
+
+/**
+ * 发送消息并流式获取 AI 回复（SSE）
+ * POST /api/chat/conversations/:id/messages/stream
+ * body: { content, provider?, promptId? }
+ * 事件：{type:'think',text} 思考过程增量 → {type:'content',text} 正文增量 → {type:'done',data} 保存后的消息 → {type:'error',message} / {type:'end'}
+ */
+export async function sendMessageStream(req: Request, res: Response) {
+  const userId = req.authUser!.id;
+  const conversationId = parseInt(req.params.id, 10);
+  const { content, provider, promptId } = req.body || {};
+  if (!content?.trim()) {
+    res.status(400).json(fail('消息内容不能为空'));
+    return;
+  }
+  const conv = await queryOne<{ id: number; provider: string }>(
+    'SELECT id, provider FROM ai_conversations WHERE id = $1 AND user_id = $2',
+    [conversationId, userId]
+  );
+  if (!conv) {
+    res.status(404).json(fail('对话不存在'));
+    return;
+  }
+  const aiProvider: AiProvider =
+    provider === 'deepseek' ? 'deepseek' : provider === 'qwen' ? 'qwen' : (conv.provider as AiProvider);
+
+  // 保存用户消息
+  await queryOne(
+    `INSERT INTO ai_messages (conversation_id, role, content) VALUES ($1, 'user', $2)`,
+    [conversationId, content.trim()]
+  );
+
+  // 构建消息列表（含历史，与 sendMessage 一致）
+  const history = await queryMany<{ role: string; content: string }>(
+    'SELECT role, content FROM ai_messages WHERE conversation_id = $1 ORDER BY id DESC LIMIT 20',
+    [conversationId]
+  );
+  history.reverse();
+
+  const systemPrompt = (await getEffectivePrompt(userId, 'chat', promptId)) || '';
+  if (!systemPrompt) {
+    res.status(500).json(fail('系统提示词未配置，请联系管理员初始化系统默认提示词'));
+    return;
+  }
+
+  const logContext = await buildLogContext(userId);
+  const messages: ChatMessage[] = [
+    {
+      role: 'system',
+      content: `${systemPrompt}\n\n=== 日志数据上下文（仅限当前用户数据权限范围） ===\n${logContext}`,
+    },
+    ...history.map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content })),
+  ];
+
+  const userAiConfig = await getUserAiConfig(userId);
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  const send = (obj: unknown) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
+
+  let reply = '';
+  let think = '';
+  try {
+    for await (const chunk of chatStream(aiProvider, messages, {
+      override: aiProvider === 'qwen' ? userAiConfig.qwen : userAiConfig.deepseek,
+    })) {
+      if (chunk.type === 'reasoning') {
+        think += chunk.text;
+        send({ type: 'think', text: chunk.text });
+      } else {
+        reply += chunk.text;
+        send({ type: 'content', text: chunk.text });
+      }
+    }
+    if (!reply.trim()) {
+      throw new Error('AI 返回内容为空');
+    }
+    // 保存 AI 回复（含思考过程）
+    const assistantMsg = await queryOne(
+      `INSERT INTO ai_messages (conversation_id, role, content, think) VALUES ($1, 'assistant', $2, $3) RETURNING *`,
+      [conversationId, reply, think || null]
+    );
+    // 更新对话时间与标题（首条消息时）
+    const msgCount = await queryOne<{ cnt: number }>(
+      'SELECT COUNT(*)::int AS cnt FROM ai_messages WHERE conversation_id = $1',
+      [conversationId]
+    );
+    if (msgCount && msgCount.cnt <= 2) {
+      await queryOne(`UPDATE ai_conversations SET title = $1, updated_at = NOW() WHERE id = $2`, [
+        content.trim().slice(0, 30),
+        conversationId,
+      ]);
+    } else {
+      await queryOne('UPDATE ai_conversations SET updated_at = NOW() WHERE id = $1', [conversationId]);
+    }
+    send({ type: 'done', data: assistantMsg });
+  } catch (e: any) {
+    send({ type: 'error', message: e?.message || 'AI 调用失败' });
+  }
+  send({ type: 'end' });
+  res.end();
 }
 
 /**

@@ -150,6 +150,7 @@ CREATE TABLE IF NOT EXISTS ai_messages (
   conversation_id INTEGER     NOT NULL REFERENCES ai_conversations(id) ON DELETE CASCADE,
   role            VARCHAR(20) NOT NULL,             -- user / assistant
   content         TEXT        NOT NULL,
+  think           TEXT,                             -- AI 思考过程（assistant 消息）
   created_at      TIMESTAMP   NOT NULL DEFAULT NOW()
 );
 
@@ -713,6 +714,8 @@ async function initDb() {
   await query(
     `ALTER TABLE reports ADD COLUMN IF NOT EXISTS group_id INTEGER REFERENCES project_groups(id) ON DELETE SET NULL`
   );
+  // AI 消息表增加 think（AI 思考过程）列
+  await query(`ALTER TABLE ai_messages ADD COLUMN IF NOT EXISTS think TEXT`);
 
   const res = await query('SELECT COUNT(*)::int AS cnt FROM users');
   console.log(`当前用户数: ${res.rows[0].cnt}`);

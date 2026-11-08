@@ -137,6 +137,8 @@ export interface ChatMessage {
   conversation_id: number;
   role: 'user' | 'assistant';
   content: string;
+  /** AI 思考过程（仅 assistant 消息，可能为空） */
+  think?: string | null;
   created_at: string;
 }
 

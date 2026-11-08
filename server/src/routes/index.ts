@@ -73,6 +73,11 @@ router.post('/chat/conversations', authMiddleware, wrap(chatController.createCon
 router.delete('/chat/conversations/:id', authMiddleware, wrap(chatController.deleteConversation));
 router.get('/chat/conversations/:id/messages', authMiddleware, wrap(chatController.getMessages));
 router.post('/chat/conversations/:id/messages', authMiddleware, wrap(chatController.sendMessage));
+router.post(
+  '/chat/conversations/:id/messages/stream',
+  authMiddleware,
+  wrap(chatController.sendMessageStream)
+);
 
 // ==================== 系统配置 / 用户 AI 配置 / 菜单开关 ====================
 import * as systemConfigController from '../controllers/systemConfig.controller';

@@ -26,6 +26,12 @@ ALTER TABLE work_logs ADD COLUMN IF NOT EXISTS ai_score INTEGER;
 ALTER TABLE reports ADD COLUMN IF NOT EXISTS group_id INTEGER REFERENCES project_groups(id) ON DELETE SET NULL;
 
 -- ------------------------------------------------------------
+-- 2.1 ai_messages 新增 think 列（AI 助手消息保存思考过程）
+--    历史消息该列为 NULL（无思考过程），不影响历史数据
+-- ------------------------------------------------------------
+ALTER TABLE ai_messages ADD COLUMN IF NOT EXISTS think TEXT;
+
+-- ------------------------------------------------------------
 -- 3. 新增待办表 todo_items（新版填报-今日待办）
 --    已存在则跳过（IF NOT EXISTS），老库历史数据不受影响
 -- ------------------------------------------------------------

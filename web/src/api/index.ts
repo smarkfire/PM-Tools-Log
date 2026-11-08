@@ -342,6 +342,54 @@ export const chatApi = {
   messages: (id: number) => request.get<ChatMessage[]>(`/chat/conversations/${id}/messages`),
   send: (id: number, data: { content: string; provider?: string; promptId?: number }) =>
     request.post(`/chat/conversations/${id}/messages`, data),
+  /**
+   * 发送消息（SSE 流式）：实时回调思考过程与正文增量
+   * onThink/onContent 为增量文本；onDone 返回保存后的完整消息；onError 返回错误信息
+   */
+  sendStream: async (
+    id: number,
+    data: { content: string; provider?: string; promptId?: number },
+    handlers: {
+      onThink: (text: string) => void;
+      onContent: (text: string) => void;
+      onDone: (msg: ChatMessage) => void;
+      onError: (message: string) => void;
+    }
+  ) => {
+    const token = localStorage.getItem('token');
+    const res = await fetch(`/api/chat/conversations/${id}/messages/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok || !res.body) throw new Error(`请求失败(${res.status})`);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const parts = buf.split('\n\n');
+      buf = parts.pop() || '';
+      for (const part of parts) {
+        const line = part.trim();
+        if (!line.startsWith('data:')) continue;
+        try {
+          const evt = JSON.parse(line.slice(5).trim());
+          if (evt.type === 'think') handlers.onThink(evt.text || '');
+          else if (evt.type === 'content') handlers.onContent(evt.text || '');
+          else if (evt.type === 'done') handlers.onDone(evt.data);
+          else if (evt.type === 'error') handlers.onError(evt.message || 'AI 调用失败');
+        } catch {
+          // 忽略不完整分片
+        }
+      }
+    }
+  },
 };
 
 // ==================== 系统配置（管理员） ====================

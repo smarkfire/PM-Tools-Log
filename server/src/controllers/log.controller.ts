@@ -508,7 +508,12 @@ export async function assistLog(req: Request, res: Response) {
       temperature: 0.3,
       override: aiProvider === 'qwen' ? userAiConfig.qwen : userAiConfig.deepseek,
     })) {
-      full += chunk;
+      // 模型原生思考流（reasoning_content）：直接推送给前端展示
+      if (chunk.type === 'reasoning') {
+        send({ type: 'think', text: chunk.text });
+        continue;
+      }
+      full += chunk.text;
       const sepIdx = full.indexOf(SEP);
       const thinkEnd = sepIdx >= 0 ? sepIdx : full.length;
       if (thinkEnd > sentThink) {

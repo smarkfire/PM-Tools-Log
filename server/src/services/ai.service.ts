@@ -88,7 +88,9 @@ export async function chat(
 }
 
 /**
- * 调用 AI 对话接口（流式）：逐段产出增量文本（OpenAI 兼容 SSE）
+ * 调用 AI 对话接口（流式）：逐段产出结构化增量（OpenAI 兼容 SSE）
+ * - type 'reasoning'：模型思考过程增量（delta.reasoning_content，模型支持时才有）
+ * - type 'content'：正文内容增量
  */
 export async function* chatStream(
   provider: AiProvider,
@@ -98,7 +100,7 @@ export async function* chatStream(
     maxTokens?: number;
     override?: ProviderOverride;
   }
-): AsyncGenerator<string> {
+): AsyncGenerator<{ type: 'reasoning' | 'content'; text: string }> {
   const cfg = options?.override ?? getEnvConfig(provider);
   if (!cfg.apiKey) {
     throw new Error(
@@ -154,8 +156,11 @@ export async function* chatStream(
         if (!payload || payload === '[DONE]') continue;
         try {
           const obj = JSON.parse(payload);
-          const delta = obj.choices?.[0]?.delta?.content;
-          if (delta) yield delta as string;
+          const delta = obj.choices?.[0]?.delta;
+          const reasoning = delta?.reasoning_content;
+          const content = delta?.content;
+          if (reasoning) yield { type: 'reasoning', text: reasoning as string };
+          if (content) yield { type: 'content', text: content as string };
         } catch {
           // 忽略不完整分片
         }
