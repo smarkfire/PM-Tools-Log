@@ -643,6 +643,78 @@ export async function reviewLog(req: Request, res: Response) {
   }
 }
 
+/**
+ * 按选中的质检建议修订日志（保存前二次质检点"返回修改"时调用）
+ * 只修订选中的建议涉及的内容，其余保持原样
+ * POST /api/logs/apply-suggestions
+ * body: { date, content, suggestions, provider }
+ * 返回: { optimizedContent }
+ */
+export async function applySuggestions(req: Request, res: Response) {
+  const userId = req.authUser!.id;
+  const { date, content, suggestions, provider } = req.body || {};
+  if (!content || !String(content).trim()) {
+    res.status(400).json(fail('日志内容为空，无法按建议修改'));
+    return;
+  }
+  const selected = (Array.isArray(suggestions) ? suggestions : [])
+    .map((s: unknown) => String(s).trim())
+    .filter(Boolean)
+    .slice(0, 5);
+  if (!selected.length) {
+    res.status(400).json(fail('请至少选择一条修改建议'));
+    return;
+  }
+
+  // 复用日志优化系统提示词（含标准日志模板与"直接输出 Markdown"的输出约定）
+  const systemPrompt = await getEffectivePrompt(userId, 'log_optimize');
+  if (!systemPrompt) {
+    res.status(500).json(fail('系统提示词未配置，请联系管理员初始化'));
+    return;
+  }
+
+  const me = await queryOne<{ display_name: string }>(
+    'SELECT display_name FROM users WHERE id = $1',
+    [userId]
+  );
+  const displayName = me?.display_name || '我';
+  const aiProvider: AiProvider = provider === 'deepseek' ? 'deepseek' : 'qwen';
+
+  const messages: ChatMessage[] = [
+    { role: 'system', content: systemPrompt },
+    {
+      role: 'user',
+      content: [
+        '【任务模式：按质检建议修订日志】下面是一篇已生成的日志终稿，以及质检后用户选中的修改建议。',
+        '只修订选中建议涉及的内容，建议之外的部分保持原样（标题、结构、其余事项一字不改）；不编造建议与原文之外的事实；修订后仍须符合《标准日志模板》的结构与层级。',
+        '直接输出修订后的完整日志 Markdown，不要输出解释、思考过程或对比说明。',
+        '',
+        `【作者】${displayName}；【日志日期】${date || '今天'}`,
+        '【日志终稿】',
+        String(content),
+        '【选中的修改建议】',
+        selected.map((s, i) => `${i + 1}. ${s}`).join('\n'),
+      ].join('\n'),
+    },
+  ];
+
+  const userAiConfig = await getUserAiConfig(userId);
+  try {
+    const result = await chat(aiProvider, messages, {
+      temperature: 0.2, // 忠实修订：低温度，避免改动建议之外的内容
+      override: aiProvider === 'qwen' ? userAiConfig.qwen : userAiConfig.deepseek,
+    });
+    const optimized = result.trim();
+    if (!optimized) {
+      res.status(500).json(fail('AI 未返回修改结果，请重试'));
+      return;
+    }
+    res.json(success({ optimizedContent: optimized }, '已按选中建议修改日志'));
+  } catch (e: any) {
+    res.status(500).json(fail(e?.message || 'AI 调用失败'));
+  }
+}
+
 /** 解析 AI 返回的 JSON（容错：剥离围栏 / 多余文字） */
 function parseAssistResult(raw: string): {
   action: 'continue' | 'done';

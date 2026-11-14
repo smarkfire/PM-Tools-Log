@@ -313,17 +313,33 @@
         </div>
         <div v-if="reviewResult.summary" class="review-summary">{{ reviewResult.summary }}</div>
         <template v-if="reviewResult.suggestions.length">
-          <div class="review-sug-title">修改建议：</div>
-          <ul class="review-sug-list">
-            <li v-for="(s, i) in reviewResult.suggestions" :key="i">{{ s }}</li>
-          </ul>
+          <div class="review-sug-title review-sug-head">
+            <span>修改建议：</span>
+            <el-checkbox
+              :model-value="allSuggestionsSelected"
+              :indeterminate="selectedSuggestions.length > 0 && !allSuggestionsSelected"
+              @change="toggleAllSuggestions"
+            >
+              全选
+            </el-checkbox>
+          </div>
+          <el-checkbox-group v-model="selectedSuggestions" class="review-sug-list">
+            <div v-for="(s, i) in reviewResult.suggestions" :key="i" class="review-sug-item">
+              <el-checkbox :value="i">{{ i + 1 }}. {{ s }}</el-checkbox>
+            </div>
+          </el-checkbox-group>
+          <div class="review-sug-tip">
+            点「返回修改」将按勾选的建议由 AI 自动修改日志（其余内容保持原样）；全部取消勾选则仅关闭弹窗、手动修改。
+          </div>
         </template>
         <div v-else class="review-sug-title" style="color: var(--el-color-success)">
           AI 未发现需要修改的问题。
         </div>
       </template>
       <template #footer>
-        <el-button @click="cancelReview">返回修改</el-button>
+        <el-button :loading="applying" @click="cancelReview">
+          {{ applying ? 'AI 修改中…' : '返回修改' }}
+        </el-button>
         <el-button type="success" :loading="saving" :disabled="!reviewResult" @click="doSave">
           <el-icon><Check /></el-icon>确认保存
         </el-button>
@@ -555,12 +571,14 @@ async function runAssist() {
 
     const data = finalData;
     if (data && data.action === 'done' && data.result) {
-      result.value = { ...data.result, score: data.score };
+      // 卡片与 result 使用同一引用：卡片内手动编辑的内容也会随保存提交
+      msg.logResult = { ...data.result };
+      result.value = msg.logResult;
+      result.value.score = data.score;
       pendingQuestions.value = [];
       msg.text =
         `✅ 质量检查通过${data.score != null ? `（${data.score} 分）` : ''}：${data.summary || '日志已按「好日志规范」优化生成'}\n\n` +
         '请在下方卡片中检查确认，可直接编辑，确认无误后点击「确认保存日志」。';
-      msg.logResult = data.result;
       msg.viewMode = 'preview';
       history.value.push({
         role: 'assistant',
@@ -656,6 +674,8 @@ async function saveLog() {
       provider: provider.value,
     });
     reviewResult.value = res.data;
+    // 建议默认全选，用户可取消部分勾选
+    selectedSuggestions.value = (res.data.suggestions || []).map((_, i) => i);
     stopReviewSteps();
   } catch (e: any) {
     stopReviewSteps();
@@ -685,6 +705,20 @@ interface ReviewResult {
 const reviewVisible = ref(false);
 const reviewing = ref(false);
 const reviewResult = ref<ReviewResult | null>(null);
+/** 勾选的修改建议（下标），默认全选 */
+const selectedSuggestions = ref<number[]>([]);
+/** 按建议 AI 修改中 */
+const applying = ref(false);
+
+const allSuggestionsSelected = computed(
+  () =>
+    !!reviewResult.value?.suggestions.length &&
+    selectedSuggestions.value.length === reviewResult.value.suggestions.length
+);
+
+function toggleAllSuggestions(v: any) {
+  selectedSuggestions.value = v ? (reviewResult.value?.suggestions || []).map((_, i) => i) : [];
+}
 
 /** 得分配色：≥80 绿 / ≥60 橙 / <60 红 */
 function scoreClass(s: number | null | undefined) {
@@ -721,11 +755,38 @@ function stopReviewSteps() {
   }
 }
 
-/** 复检中点击"返回修改"：关闭弹窗并复位状态 */
-function cancelReview() {
-  reviewVisible.value = false;
-  reviewing.value = false;
-  stopReviewSteps();
+/** 复检弹窗"返回修改"：勾选了建议时先由 AI 按选中建议修改日志，否则直接关闭弹窗手动修改 */
+async function cancelReview() {
+  if (applying.value) return;
+  const sug = reviewResult.value?.suggestions || [];
+  const picked = selectedSuggestions.value.map((i) => sug[i]).filter(Boolean);
+  if (!picked.length || !result.value?.content) {
+    reviewVisible.value = false;
+    reviewing.value = false;
+    stopReviewSteps();
+    return;
+  }
+  applying.value = true;
+  try {
+    const res = await logApi.applySuggestions({
+      date: logDate.value,
+      content: result.value.content,
+      suggestions: picked,
+      provider: provider.value,
+    });
+    // 卡片与 result 同引用，内容更新即同步展示；切回预览态便于核对
+    result.value.content = res.data.optimizedContent;
+    const last = messages.value[messages.value.length - 1];
+    if (last?.logResult) last.viewMode = 'preview';
+    reviewVisible.value = false;
+    reviewing.value = false;
+    stopReviewSteps();
+    ElMessage.success(`已按 ${picked.length} 条建议修改日志，请检查后重新质检保存`);
+  } catch (e: any) {
+    ElMessage.error('按建议修改失败：' + (e?.response?.data?.message || e?.message || '网络异常'));
+  } finally {
+    applying.value = false;
+  }
 }
 
 onUnmounted(stopReviewSteps);
@@ -1393,11 +1454,46 @@ async function doSave() {
   margin: 12px 0 6px;
 }
 
+.review-sug-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.review-sug-head .el-checkbox {
+  height: auto;
+  font-weight: 400;
+}
+
 .review-sug-list {
   margin: 0;
-  padding-left: 18px;
+  display: block;
+}
+
+.review-sug-item {
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--el-fill-color-light, #f5f7fa);
+  margin-bottom: 6px;
+}
+
+.review-sug-item .el-checkbox {
+  height: auto;
+  align-items: flex-start;
+}
+
+.review-sug-item :deep(.el-checkbox__label) {
   font-size: 13px;
-  line-height: 1.8;
+  line-height: 1.6;
   color: var(--text-regular, #606266);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.review-sug-tip {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary, #909399);
 }
 </style>

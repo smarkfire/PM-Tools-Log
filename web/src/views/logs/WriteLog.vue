@@ -271,14 +271,30 @@
         </div>
         <div v-if="reviewResult.summary" class="review-summary">{{ reviewResult.summary }}</div>
         <template v-if="reviewResult.suggestions.length">
-          <div class="review-sug-title">修改建议：</div>
-          <ol class="review-sugs">
-            <li v-for="(s, i) in reviewResult.suggestions" :key="i">{{ s }}</li>
-          </ol>
+          <div class="review-sug-title review-sug-head">
+            <span>修改建议：</span>
+            <el-checkbox
+              :model-value="allSuggestionsSelected"
+              :indeterminate="selectedSuggestions.length > 0 && !allSuggestionsSelected"
+              @change="toggleAllSuggestions"
+            >
+              全选
+            </el-checkbox>
+          </div>
+          <el-checkbox-group v-model="selectedSuggestions" class="review-sug-list">
+            <div v-for="(s, i) in reviewResult.suggestions" :key="i" class="review-sug-item">
+              <el-checkbox :value="i">{{ i + 1 }}. {{ s }}</el-checkbox>
+            </div>
+          </el-checkbox-group>
+          <div class="review-sug-tip">
+            点「返回修改」将按勾选的建议由 AI 自动修改优化稿（其余内容保持原样）；全部取消勾选则仅关闭弹窗、手动修改。
+          </div>
         </template>
       </template>
       <template #footer>
-        <el-button @click="cancelReview">返回修改</el-button>
+        <el-button :loading="applying" @click="cancelReview">
+          {{ applying ? 'AI 修改中…' : '返回修改' }}
+        </el-button>
         <el-button type="success" :loading="saving" :disabled="!reviewResult" @click="doSave">
           确认保存
         </el-button>
@@ -341,6 +357,20 @@ const reviewVisible = ref(false);
 const reviewResult = ref<{ score: number | null; summary: string; suggestions: string[] } | null>(
   null
 );
+/** 勾选的修改建议（下标），默认全选 */
+const selectedSuggestions = ref<number[]>([]);
+/** 按建议 AI 修改中 */
+const applying = ref(false);
+
+const allSuggestionsSelected = computed(
+  () =>
+    !!reviewResult.value?.suggestions.length &&
+    selectedSuggestions.value.length === reviewResult.value.suggestions.length
+);
+
+function toggleAllSuggestions(v: any) {
+  selectedSuggestions.value = v ? (reviewResult.value?.suggestions || []).map((_, i) => i) : [];
+}
 
 // 质检动作提示：轮换展示当前正在做的步骤
 const REVIEW_STEPS = [
@@ -369,11 +399,37 @@ function stopReviewSteps() {
   }
 }
 
-/** 质检中点击"返回修改"：关闭弹窗并复位状态 */
-function cancelReview() {
-  reviewVisible.value = false;
-  reviewing.value = false;
-  stopReviewSteps();
+/** 质检弹窗"返回修改"：勾选了建议时先由 AI 按选中建议修改优化稿，否则直接关闭弹窗手动修改 */
+async function cancelReview() {
+  if (applying.value) return;
+  const sug = reviewResult.value?.suggestions || [];
+  const picked = selectedSuggestions.value.map((i) => sug[i]).filter(Boolean);
+  // 无选中建议或优化稿为空（质检针对的是原始内容）时，仅关闭弹窗
+  if (!picked.length || !optimizedContent.value?.trim()) {
+    reviewVisible.value = false;
+    reviewing.value = false;
+    stopReviewSteps();
+    return;
+  }
+  applying.value = true;
+  try {
+    const res = await logApi.applySuggestions({
+      date: form.logDate,
+      content: optimizedContent.value,
+      suggestions: picked,
+      provider: aiProvider.value,
+    });
+    optimizedContent.value = res.data.optimizedContent;
+    resultView.value = 'preview';
+    reviewVisible.value = false;
+    reviewing.value = false;
+    stopReviewSteps();
+    ElMessage.success(`已按 ${picked.length} 条建议修改日志，请检查后重新质检保存`);
+  } catch (e: any) {
+    ElMessage.error('按建议修改失败：' + (e?.response?.data?.message || e?.message || '网络异常'));
+  } finally {
+    applying.value = false;
+  }
 }
 
 /** 质检分数徽章配色 */
@@ -542,6 +598,8 @@ async function handleSave() {
       provider: aiProvider.value,
     });
     reviewResult.value = res.data;
+    // 建议默认全选，用户可取消部分勾选
+    selectedSuggestions.value = (res.data.suggestions || []).map((_, i) => i);
     stopReviewSteps();
   } catch {
     stopReviewSteps();
@@ -788,12 +846,47 @@ async function doSave() {
   margin: 4px 0;
 }
 
-.review-sugs {
+.review-sug-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.review-sug-head .el-checkbox {
+  height: auto;
+  font-weight: 400;
+}
+
+.review-sug-list {
   margin: 4px 0 0;
-  padding-left: 18px;
+  display: block;
+}
+
+.review-sug-item {
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--bg-page, #f5f7fa);
+  margin-bottom: 6px;
+}
+
+.review-sug-item .el-checkbox {
+  height: auto;
+  align-items: flex-start;
+}
+
+.review-sug-item :deep(.el-checkbox__label) {
   font-size: 13px;
+  line-height: 1.6;
   color: var(--text-regular);
-  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.review-sug-tip {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
 }
 
 /* ==================== 填写要点气泡（与新版一致） ==================== */

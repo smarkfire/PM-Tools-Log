@@ -109,6 +109,9 @@ export const logApi = {
       '/logs/assist/review',
       data
     ),
+  /** 质检后"返回修改"：按选中的质检建议由 AI 修订日志（其余内容保持原样） */
+  applySuggestions: (data: { date: string; content: string; suggestions: string[]; provider?: string }) =>
+    request.post<{ optimizedContent: string }>('/logs/apply-suggestions', data),
   /**
    * 新版填报：流式 AI 生成（SSE）
    * onThink 实时回调思考过程增量文本；onFinal 返回结构化检查结果；onError 返回错误信息
