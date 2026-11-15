@@ -3,7 +3,7 @@
     <div class="page-header">
       <div class="header-left">
         <div class="page-title">我的日志·新版</div>
-        <div class="page-desc">对话式填报产生的日志（每日一条，项目写在日志内容中）</div>
+        <div class="page-desc">新旧版填报的日志都在这里，按来源标记区分（每日一条，项目写在日志内容中）</div>
       </div>
       <div class="header-tools">
         <el-radio-group v-model="viewMode" size="small">
@@ -65,8 +65,11 @@
         >
           <div class="card-top">
             <span class="card-date">{{ formatDateOnly(log.log_date) }}</span>
-            <span class="score-badge" :class="scoreClass(log.ai_score)">
-              {{ log.ai_score != null ? log.ai_score + ' 分' : '未评分' }}
+            <span class="card-tags">
+              <el-tag size="small" :type="sourceTagType(log)" effect="plain">{{ sourceLabel(log) }}</el-tag>
+              <span class="score-badge" :class="scoreClass(log.ai_score)">
+                {{ log.ai_score != null ? log.ai_score + ' 分' : '未评分' }}
+              </span>
             </span>
           </div>
           <div v-if="extractProjects(log).length" class="card-projects">
@@ -89,7 +92,7 @@
         </div>
         <el-empty
           v-if="!loading && logs.length === 0"
-          description="暂无新版日志，去「填写日志·新版」体验对话式填报吧"
+          description="暂无日志，去「填写日志」开始记录吧"
           :image-size="80"
         >
           <el-button type="primary" @click="$router.push('/logs/write-v2')">去填写日志</el-button>
@@ -101,6 +104,11 @@
         <el-table :data="logs" stripe>
           <el-table-column prop="log_date" label="日志日期" width="110">
             <template #default="{ row }">{{ formatDateOnly(row.log_date) }}</template>
+          </el-table-column>
+          <el-table-column label="来源" width="76">
+            <template #default="{ row }">
+              <el-tag size="small" :type="sourceTagType(row)" effect="plain">{{ sourceLabel(row) }}</el-tag>
+            </template>
           </el-table-column>
           <el-table-column label="得分" width="90">
             <template #default="{ row }">
@@ -167,7 +175,7 @@
             </template>
           </el-table-column>
         </el-table>
-        <el-empty v-if="!loading && logs.length === 0" description="暂无新版日志" :image-size="80" />
+        <el-empty v-if="!loading && logs.length === 0" description="暂无日志" :image-size="80" />
       </template>
 
       <!-- 分页 -->
@@ -198,6 +206,9 @@
           </el-descriptions-item>
           <el-descriptions-item label="工时">
             {{ currentLog.hours != null ? currentLog.hours + ' 小时' : '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="来源">
+            <el-tag size="small" :type="sourceTagType(currentLog)" effect="plain">{{ sourceLabel(currentLog) }}</el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="涉及项目" :span="isMobile ? 1 : 2">
             <template v-if="extractProjects(currentLog).length">
@@ -352,6 +363,15 @@ function logText(log: WorkLog) {
   return log.optimized_content || log.content;
 }
 
+/** 来源标记：v1 旧版表单填报 / v2 新版对话式 */
+function sourceLabel(log: WorkLog) {
+  return log.source === 'v1' ? '旧版' : '新版';
+}
+
+function sourceTagType(log: WorkLog): 'info' | 'primary' {
+  return log.source === 'v1' ? 'info' : 'primary';
+}
+
 /** 日志日期：仅取年月日 */
 function formatDateOnly(d?: string) {
   return d ? d.slice(0, 10) : '-';
@@ -412,7 +432,7 @@ async function loadLogs() {
       pageSize: query.pageSize,
       keyword: query.keyword || undefined,
       userId: userStore.user?.id,
-      source: 'v2',
+      // 不筛选来源：新版 + 旧版填报的日志都展示，来源以标签区分
       ...(dateRange.value ? { startDate: dateRange.value[0], endDate: dateRange.value[1] } : {}),
     });
     logs.value = res.data.list || [];
@@ -557,7 +577,8 @@ async function confirmSaveEdited() {
       optimizedContent: editForm.content.trim(),
       aiProvider: log.ai_provider || undefined,
       hours: log.hours ?? undefined,
-      source: 'v2',
+      // 编辑保存保留日志原来源，避免 v1 日志被误改成 v2
+      source: log.source === 'v1' ? 'v1' : 'v2',
       aiScore: reviewResult.value?.score ?? log.ai_score ?? undefined,
     });
     ElMessage.success('修改已保存');
@@ -679,6 +700,13 @@ onMounted(async () => {
   font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.card-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .score-badge {
