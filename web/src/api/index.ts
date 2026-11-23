@@ -102,16 +102,23 @@ export const logApi = {
     draft?: string;
     history?: { role: 'user' | 'assistant'; content: string }[];
     provider?: string;
+    /** "AI 优化提示词"下拉框选中的自定义提示词，未选时后端用系统默认质检提示词 */
+    promptId?: number;
   }) => request.post<AssistResult>('/logs/assist', data),
   /** 新版填报：保存前二次质检（打分 + 修改建议，不改写日志） */
-  review: (data: { date: string; content: string; provider?: string }) =>
+  review: (data: { date: string; content: string; provider?: string; promptId?: number }) =>
     request.post<{ score: number | null; summary: string; suggestions: string[] }>(
       '/logs/assist/review',
       data
     ),
   /** 质检后"返回修改"：按选中的质检建议由 AI 修订日志（其余内容保持原样） */
-  applySuggestions: (data: { date: string; content: string; suggestions: string[]; provider?: string }) =>
-    request.post<{ optimizedContent: string }>('/logs/apply-suggestions', data),
+  applySuggestions: (data: {
+    date: string;
+    content: string;
+    suggestions: string[];
+    provider?: string;
+    promptId?: number;
+  }) => request.post<{ optimizedContent: string }>('/logs/apply-suggestions', data),
   /**
    * 新版填报：流式 AI 生成（SSE）
    * onThink 实时回调思考过程增量文本；onFinal 返回结构化检查结果；onError 返回错误信息
@@ -122,6 +129,8 @@ export const logApi = {
       todos?: { content: string; status: string }[];
       history?: { role: 'user' | 'assistant'; content: string }[];
       provider?: string;
+      /** "AI 优化提示词"下拉框选中的自定义提示词，未选时后端用系统默认质检提示词 */
+      promptId?: number;
     },
     handlers: {
       onThink: (text: string) => void;

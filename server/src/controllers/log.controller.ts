@@ -79,6 +79,60 @@ const GROUP_MARKS_SUBSQL = `COALESCE((
   ), '[]'::json) AS group_marks`;
 
 /**
+ * 查询用户在"填写日志.新版"下拉框选中的自定义日志优化提示词
+ * @returns 提示词内容；未选择或所选提示词无效（不存在 / 非本人 / 类型不符）时返回 null
+ */
+async function getSelectedLogPrompt(userId: number, promptId: unknown): Promise<string | null> {
+  const id = Number(promptId);
+  if (!id || Number.isNaN(id)) return null;
+  const row = await queryOne<{ content: string }>(
+    `SELECT content FROM user_prompts WHERE id = $1 AND user_id = $2 AND type = 'log_optimize'`,
+    [id, userId]
+  );
+  return row?.content || null;
+}
+
+/**
+ * 新版填报选中自定义提示词时追加的生成与质检工作协议：
+ * 无论用户选择哪种提示词，多轮澄清、评分与 ===JSON=== 结构化输出流程保持不变
+ */
+const ASSIST_PROTOCOL_APPENDIX = `【生成与质检工作协议】（在上方提示词的基础上执行；交互与输出格式以本协议为准）
+1. 工作流程：结合今日待办（如有）与用户补充，按上方提示词的模板与要求生成日志草稿 → 按下方评分标准质检打分 → 低于 80 分通过 questions 向用户提问补全，用户补充后重新生成、重新检查 → 达到 80 分及以上输出优化定稿。待办为空时，先按上方提示词生成一份结构完整的草稿骨架，并通过 questions 请用户补充缺失信息。
+2. 【评分标准】满分 100 分，评分要严格，宁低勿高，按缺失比例扣分，分两个维度：
+一、规范符合度 40 分：
+- 结构层级正确 10 分：日志结构符合上方提示词要求的模板与层级
+- 投入时长明确 10 分：写明当天投入工时（模板无此要求时按符合计分）
+- 明日计划 10 分：给出后续工作安排（模板无此要求时按符合计分）
+- 问题与风险 10 分：如实给出（确实没有可写"无"，不扣分；模板无此要求时按符合计分）
+二、事项质量 60 分：每条事项按以下五条标准逐条核对（每条事项 12 分基准，五条全满足得满分），全部事项取平均后折算为 60 分制：
+① 有具体对象：对象融进句子（模块/页面/接口/文档/Bug号）
+② 有具体动作与成果/数据：尽量量化、可验证，如实说明不硬造；进展状态仅在待办执行情况或用户补充明确说明时写入
+③ 一条一件事：不把多件事挤在一条里
+④ 写结果不写过程：直接写最终结论，排查类写根因
+⑤ 符合上方提示词强调的要素与风格
+笼统表述（"处理了一些工作""继续做""修 Bug"无对象）按条重扣。
+评分必须先在思考中逐项计算（结构层级 X/10、投入时长 X/10、明日计划 X/10、问题风险 X/10、事项质量 X/60），score 为各项之和；同一篇日志只要内容相同，无论评多少次（包括保存前的二次质检）都应得到相同的分数，不得因复检而额外从严
+3. 【交互规则】绝不编造待办与补充中没有的事实；用户没说的成果要么问，要么标注缺失，可基于待办内容做合理归纳。questions 中 field 用于归类（content 事项内容 / hours 工时 / group 小组归属 / project 项目 / tomorrow 明日计划 / risk 问题风险），options 可为空数组表示需用户自由输入；options 只列真实、互斥的候选项，禁止输出"其他 / 自行填写 / 以上都"类兜底选项（系统界面已自动提供自由填写入口）；不要输出与任务无关的解释。
+4. 【输出格式】你的回复分两部分，缺一不可：
+第一部分：think——用自然语言简明展示你的思考与检查过程（会实时展示给用户）。
+然后单独一行输出分隔符：===JSON===
+第二部分：一个 JSON 对象（不要用 Markdown 代码块包裹）：
+{"action":"continue","score":65,"summary":"检查结论（当前得分与主要失分点，一两句话）","questions":[{"field":"content","question":"问题描述","options":["选项A","选项B"]}],"result":null}
+或（分数达到 80 及以上时）：
+{"action":"done","score":85,"summary":"检查结论一句话","questions":[],"result":{"projects":["识别出的项目名称"],"content":"按上方提示词模板生成的完整 Markdown 日志正文","hours":8,"groups":[{"name":"小组名"}]}}
+说明：score 为 0~100 的整数，保存进日志作为质检得分。result.content 用 \\n 表示换行；result.projects 为日志中出现的全部项目名称列表（与【参与的项目与小组】清单逐一核对，完全一致，不使用别名简写；无项目信息时为空数组）；hours 为当天在各项目的总投入工时（数字）；groups 为日志中涉及的小组名称列表（同样与清单核对，无小组时为空数组）。`;
+
+/** 新版填报选中自定义提示词时，保存前二次质检追加的评分协议 */
+const REVIEW_PROTOCOL_APPENDIX = `【质检评分标准】（对日志终稿复检时按此标准打分，仅打分与给建议，不改写日志）
+一、规范符合度 40 分：
+- 结构层级正确 10 分：日志结构符合上方提示词要求的模板与层级
+- 投入时长明确 10 分（模板无此要求时按符合计分）
+- 明日计划 10 分（模板无此要求时按符合计分）
+- 问题与风险 10 分（如实写"无"不扣分；模板无此要求时按符合计分）
+二、事项质量 60 分：每条事项 12 分基准，五条标准：① 有具体对象（融进句子）② 有具体动作与成果/数据（尽量量化，不硬造；进展状态仅在原文或用户补充明确时写入）③ 一条一件事 ④ 写结果不写过程（排查类写根因）⑤ 符合上方提示词强调的要素与风格。笼统表述按条重扣。
+评分必须先在思考中逐项计算（结构层级 X/10、投入时长 X/10、明日计划 X/10、问题风险 X/10、事项质量 X/60），score 为各项之和；同一篇日志只要内容相同，无论评多少次都应得到相同的分数。`;
+
+/**
  * 查询日志列表（按数据权限过滤）
  * GET /api/logs?projectId=&userId=&startDate=&endDate=&keyword=&page=&pageSize=
  */
@@ -406,12 +460,13 @@ export async function optimizeLog(req: Request, res: Response) {
 /**
  * 新版填报：对话式生成 + 质量检查 + 优化（多轮澄清）
  * POST /api/logs/assist
- * body: { date, projectId, todos, draft, history, provider }
+ * body: { date, projectId, todos, draft, history, provider, promptId }
+ *       promptId：界面"AI 优化提示词"下拉框选中的自定义提示词，未选时用系统默认质检提示词
  * 返回: { action: 'ask' | 'done', questions, result }
  */
 export async function assistLog(req: Request, res: Response) {
   const userId = req.authUser!.id;
-  const { date, todos, draft, history, provider } = req.body || {};
+  const { date, todos, draft, history, provider, promptId } = req.body || {};
   const aiProvider: AiProvider = provider === 'deepseek' ? 'deepseek' : 'qwen';
 
   const me = await queryOne<{ display_name: string }>(
@@ -467,7 +522,18 @@ export async function assistLog(req: Request, res: Response) {
     .filter(Boolean)
     .join('\n\n');
 
-  const systemPrompt = await getEffectivePrompt(userId, 'log_review');
+  // 系统提示词：未选提示词时用系统默认质检提示词；选中自定义提示词时以所选提示词为规范基底，
+  // 追加统一的"生成与质检工作协议"，保证选择任何提示词时多轮交互与结构化输出流程不变
+  let systemPrompt: string | null = null;
+  let useCustomPrompt = false;
+  const selectedPrompt = await getSelectedLogPrompt(userId, promptId);
+  if (selectedPrompt) {
+    useCustomPrompt = true;
+    systemPrompt = `${selectedPrompt}\n\n${ASSIST_PROTOCOL_APPENDIX}`;
+  }
+  if (!systemPrompt) {
+    systemPrompt = await getEffectivePrompt(userId, 'log_review');
+  }
   if (!systemPrompt) {
     res.status(500).json(fail('系统提示词未配置，请联系管理员初始化'));
     return;
@@ -525,7 +591,8 @@ export async function assistLog(req: Request, res: Response) {
     const jsonText = sepIdx >= 0 ? full.slice(sepIdx + SEP.length) : full;
     const parsed = parseAssistResult(jsonText);
     // 程序化兜底：AI 判定完成但日志缺小组三级标题时，强制转为提问（不依赖模型自觉遵守提示词）
-    if (parsed.action === 'done' && parsed.result) {
+    // 自定义提示词的模板可能不含"### 小组名称"结构，此时跳过该兜底
+    if (!useCustomPrompt && parsed.action === 'done' && parsed.result) {
       const content: string = parsed.result.content || '';
       const projectsInLog = parsed.result.projects || [];
       const hasGroupTitle = /###\s*(?:小组名称\s*[:：])/.test(content);
@@ -559,18 +626,27 @@ export async function assistLog(req: Request, res: Response) {
 /**
  * 新版填报：保存前二次质检（只打分 + 给修改建议，不改写日志）
  * POST /api/logs/assist/review
- * body: { date, content, provider }
+ * body: { date, content, provider, promptId }
+ *       promptId：界面"AI 优化提示词"下拉框选中的自定义提示词，未选时用系统默认质检提示词
  * 返回: { score, summary, suggestions }
  */
 export async function reviewLog(req: Request, res: Response) {
   const userId = req.authUser!.id;
-  const { date, content, provider } = req.body || {};
+  const { date, content, provider, promptId } = req.body || {};
   if (!content || !String(content).trim()) {
     res.status(400).json(fail('日志内容为空，无法质检'));
     return;
   }
 
-  const systemPrompt = await getEffectivePrompt(userId, 'log_review');
+  // 质检与生成保持同一规范：选中的自定义提示词 + 质检评分协议；未选时用系统默认质检提示词
+  let systemPrompt: string | null = null;
+  const selectedPrompt = await getSelectedLogPrompt(userId, promptId);
+  if (selectedPrompt) {
+    systemPrompt = `${selectedPrompt}\n\n${REVIEW_PROTOCOL_APPENDIX}`;
+  }
+  if (!systemPrompt) {
+    systemPrompt = await getEffectivePrompt(userId, 'log_review');
+  }
   if (!systemPrompt) {
     res.status(500).json(fail('系统提示词未配置，请联系管理员初始化'));
     return;
@@ -595,7 +671,7 @@ export async function reviewLog(req: Request, res: Response) {
       role: 'user',
       content: [
         '【任务模式：保存前二次质检】这次不要生成、也不要改写日志，只对下面这篇已确认的日志终稿做一次质量复检。',
-        '按系统提示词中的《好日志规范》与评分标准打分：先在思考中逐项计算（结构层级 X/10、投入时长 X/10、明日计划 X/10、问题风险 X/10、事项质量 X/60），score 为各项之和。',
+        '按系统提示词中的规范模板与评分标准打分：先在思考中逐项计算（结构层级 X/10、投入时长 X/10、明日计划 X/10、问题风险 X/10、事项质量 X/60），score 为各项之和。',
         '重要：同一篇日志只要内容相同，无论评多少次都必须得到相同分数——检查与打分尺度与生成日志时的质检完全一致，不要因为"复检"而额外从严。',
         '然后给出具体、可执行的修改建议（完全达标则给出通过结论）。',
         '思考过程后，用一行 ===JSON=== 分隔，输出 JSON：',
@@ -647,12 +723,13 @@ export async function reviewLog(req: Request, res: Response) {
  * 按选中的质检建议修订日志（保存前二次质检点"返回修改"时调用）
  * 只修订选中的建议涉及的内容，其余保持原样
  * POST /api/logs/apply-suggestions
- * body: { date, content, suggestions, provider }
+ * body: { date, content, suggestions, provider, promptId }
+ *       promptId：界面"AI 优化提示词"下拉框选中的自定义提示词，未选时用默认日志优化提示词
  * 返回: { optimizedContent }
  */
 export async function applySuggestions(req: Request, res: Response) {
   const userId = req.authUser!.id;
-  const { date, content, suggestions, provider } = req.body || {};
+  const { date, content, suggestions, provider, promptId } = req.body || {};
   if (!content || !String(content).trim()) {
     res.status(400).json(fail('日志内容为空，无法按建议修改'));
     return;
@@ -667,7 +744,8 @@ export async function applySuggestions(req: Request, res: Response) {
   }
 
   // 复用日志优化系统提示词（含标准日志模板与"直接输出 Markdown"的输出约定）
-  const systemPrompt = await getEffectivePrompt(userId, 'log_optimize');
+  // 界面选中自定义提示词时优先使用所选提示词，保证生成、质检、修订规范一致
+  const systemPrompt = await getEffectivePrompt(userId, 'log_optimize', promptId ? Number(promptId) : undefined);
   if (!systemPrompt) {
     res.status(500).json(fail('系统提示词未配置，请联系管理员初始化'));
     return;
@@ -686,7 +764,7 @@ export async function applySuggestions(req: Request, res: Response) {
       role: 'user',
       content: [
         '【任务模式：按质检建议修订日志】下面是一篇已生成的日志终稿，以及质检后用户选中的修改建议。',
-        '只修订选中建议涉及的内容，建议之外的部分保持原样（标题、结构、其余事项一字不改）；不编造建议与原文之外的事实；修订后仍须符合《标准日志模板》的结构与层级。',
+        '只修订选中建议涉及的内容，建议之外的部分保持原样（标题、结构、其余事项一字不改）；不编造建议与原文之外的事实；修订后仍须符合系统提示词定义的模板结构与层级。',
         '直接输出修订后的完整日志 Markdown，不要输出解释、思考过程或对比说明。',
         '',
         `【作者】${displayName}；【日志日期】${date || '今天'}`,

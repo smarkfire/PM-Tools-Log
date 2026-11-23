@@ -17,32 +17,40 @@
 ## 项目名称：{项目名称}
 - 投入时长：X小时
 ### 小组名称：{小组名称}
-- {做了什么，有什么成果}
+- 需求工作：{具体对象 + 具体动作 + 成果/数据}
+- 设计工作：{具体对象 + 具体动作 + 成果/数据}
+- 开发测试工作：{具体对象 + 具体动作 + 成果/数据}
+- 用户验证工作：{具体对象 + 具体动作 + 成果/数据}
+- 数据工程工作：{具体对象 + 具体动作 + 成果/数据}
+- 智慧化工配套改造：{具体对象 + 具体动作 + 成果/数据}
+- 其他工作：{具体对象 + 具体动作 + 成果/数据}
+（每类工作无相关内容写"不涉及"；有多条时本行写"{类别}："，下一行起逐条编号；同一天涉及多个小组时，必须重复"### 小组名称：{小组名称}"段，每个三级标题下只能有1个小组名称；无小组信息则不写三级标题，直接按七类固定顺序列出事项）
 ## 明日计划
 - {后续工作安排}
 ## 问题与风险
-- {卡点或需要的协助}</pre>
+- {卡点或需要的协助，如实写"无"也可以}</pre>
               <ol>
                 <li><strong>一级标题</strong>：谁的哪天的日志</li>
                 <li><strong>二级标题</strong>："项目名称：xxx"（下写当天总投入时长）、明日计划、问题与风险</li>
-                <li><strong>三级标题</strong>："小组名称：xxx"，组下逐条写事项</li>
-                <li><strong>每条事项</strong>：写清"做了什么、有什么成果"，对象融进句子（模块、页面、接口、文档、Bug 号），带进展状态，尽量量化</li>
+                <li><strong>三级标题</strong>："小组名称：xxx"，每个小组一个标题（严禁并列）；无小组信息则不写三级标题</li>
+                <li><strong>七类工作</strong>：需求工作、设计工作、开发测试工作、用户验证工作、数据工程工作、智慧化工配套改造、其他工作——按固定顺序，七类一项不能少；无内容写"不涉及"，单条直接写，多条逐条编号，无法归入前六类的写进"其他工作"</li>
+                <li><strong>每条事项</strong>：具体对象 + 具体动作 + 成果/数据，尽量量化；进展状态仅在原文明确时保留</li>
               </ol>
-              <p class="tips-structure-title">事项怎么写算好？公式：进展 + 对象 + 动作 + 成果：</p>
+              <p class="tips-structure-title">事项怎么写算好？公式：具体对象 + 具体动作 + 成果/数据：</p>
               <table class="tips-table">
                 <tr><th>差的表述</th><th>好的表述</th></tr>
-                <tr><td>处理了一些需求</td><td>完成用户管理页权限校验开发，提测通过</td></tr>
-                <tr><td>修 Bug</td><td>修复登录 token 过期闪退问题（BUG-128），已上线</td></tr>
-                <tr><td>继续做</td><td>智能体问答功能开发（进度 80%），剩余评测模块</td></tr>
+                <tr><td>处理了一些需求</td><td>需求工作：完成用户管理页权限校验需求梳理，输出需求清单V1.0（5项）</td></tr>
+                <tr><td>修 Bug</td><td>开发测试工作：修复登录 token 过期闪退问题（BUG-128），已上线</td></tr>
+                <tr><td>开了会</td><td>其他工作：参加 PRD 评审会，确认 3 处需求变更，会议纪要已同步</td></tr>
               </table>
               <p class="tips-structure-title">评分构成（满分 100）：</p>
               <ol class="tips-score-list">
-                <li><strong>规范符合度 40 分</strong>：结构层级正确（10）＋ 投入时长明确（10）＋ 明日计划（10）＋ 问题与风险（10，如实写"无"不扣）</li>
+                <li><strong>规范符合度 40 分</strong>：结构层级正确（10，含七类齐全、顺序正确、小组标题规范）＋ 投入时长明确（10）＋ 明日计划（10）＋ 问题与风险（10，如实写"无"不扣）</li>
                 <li>
                   <strong>事项质量 60 分</strong>：每条事项按五条标准逐条核对，取平均折算——
                   ① 有具体对象（融进句子，如模块/页面/接口/文档/Bug号）
-                  ② 有进展状态（完成 / 进行中百分比 / 受阻）
-                  ③ 有量化成果（数字/产出物，如实说明）
+                  ② 有具体动作与成果/数据（尽量量化、有产出，如实说明）
+                  ③ 进展状态规范（仅原文明确时写入，不推断补写）
                   ④ 一条一件事
                   ⑤ 写结果不写过程（排查类写根因结论）
                   笼统表述（"处理了一些工作""继续做"）按条扣分
@@ -121,6 +129,27 @@
             <div class="card-head-row">
               <span class="card-title">日志填写Agent</span>
               <div class="quick-actions">
+                <el-tooltip
+                  content="选择本次自动生成、质量检查与 AI 修订所用的提示词；默认按系统标准日志模板执行。自定义提示词可在「设置 → 提示词管理」中维护。"
+                  placement="top"
+                >
+                  <el-select
+                    v-model="selectedPromptId"
+                    placeholder="AI 优化提示词：系统默认"
+                    clearable
+                    filterable
+                    size="small"
+                    class="prompt-select"
+                  >
+                    <el-option label="系统默认（标准日志模板）" :value="0" />
+                    <el-option
+                      v-for="p in prompts"
+                      :key="p.id"
+                      :label="p.name + (p.is_default ? '（默认）' : '')"
+                      :value="p.id"
+                    />
+                  </el-select>
+                </el-tooltip>
                 <el-button
                   type="primary"
                   size="small"
@@ -352,14 +381,23 @@
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { chatApi, logApi, projectApi, todoApi, type TodoItem } from '../../api';
+import { chatApi, logApi, projectApi, promptApi, todoApi, type TodoItem } from '../../api';
 import { currentWeekMonday } from '../../utils/date';
 import MdPreview from '../../components/MdPreview.vue';
+import type { UserPrompt } from '../../types';
 
 const router = useRouter();
 
 const todos = ref<TodoItem[]>([]);
 const newTodoText = ref('');
+
+// "AI 优化提示词"下拉框：选中后自动生成、质量检查与按建议修订均按所选提示词执行
+// 0 = 系统默认（标准日志模板），未选择（清空）时同样按系统默认执行
+const prompts = ref<UserPrompt[]>([]);
+const selectedPromptId = ref<number | undefined>(undefined);
+const effectivePromptId = computed(() =>
+  selectedPromptId.value ? Number(selectedPromptId.value) : undefined
+);
 
 // 日志日期（默认今天，限本周；value-format 保证始终为 YYYY-MM-DD 字符串）与模型
 const today = new Date();
@@ -437,10 +475,11 @@ const qaGroupOptions = computed(() => {
 });
 
 onMounted(async () => {
-  const [providerRes, todoRes, projectRes] = await Promise.all([
+  const [providerRes, todoRes, projectRes, promptRes] = await Promise.all([
     chatApi.providers().catch(() => null),
     todoApi.list(logDate.value).catch(() => null),
     projectApi.list().catch(() => null),
+    promptApi.list('log_optimize').catch(() => null),
   ]);
   if (providerRes) {
     providers.qwenConfigured = providerRes.data.qwenConfigured;
@@ -455,10 +494,22 @@ onMounted(async () => {
       groups: (p.groups || []).map((g) => g.name),
     }));
   }
+  // "AI 优化提示词"下拉候选：用户自定义的日志优化提示词（系统默认作为固定第一项）
+  if (promptRes) prompts.value = promptRes.data?.prompts || [];
 });
 
 watch(logDate, () => {
   loadTodos();
+  if (messages.value.length || result.value) {
+    messages.value = [];
+    history.value = [];
+    result.value = null;
+    pendingQuestions.value = [];
+  }
+});
+
+// 切换提示词后清空当前会话：后续生成与质检均按新提示词执行，避免新旧规范混用
+watch(selectedPromptId, () => {
   if (messages.value.length || result.value) {
     messages.value = [];
     history.value = [];
@@ -547,6 +598,7 @@ async function runAssist() {
         todos: todos.value.map((t) => ({ content: t.content, status: t.status })),
         history: history.value,
         provider: provider.value,
+        promptId: effectivePromptId.value,
       },
       {
         onThink: (t) => {
@@ -672,6 +724,7 @@ async function saveLog() {
       date: logDate.value,
       content: result.value.content,
       provider: provider.value,
+      promptId: effectivePromptId.value,
     });
     reviewResult.value = res.data;
     // 建议默认全选，用户可取消部分勾选
@@ -773,6 +826,7 @@ async function cancelReview() {
       content: result.value.content,
       suggestions: picked,
       provider: provider.value,
+      promptId: effectivePromptId.value,
     });
     // 卡片与 result 同引用，内容更新即同步展示；切回预览态便于核对
     result.value.content = res.data.optimizedContent;
@@ -1051,10 +1105,22 @@ async function doSave() {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .quick-actions .el-button + .el-button {
   margin-left: 0;
+}
+
+/* "AI 优化提示词"下拉框 */
+.quick-actions .prompt-select {
+  width: 200px;
+}
+
+@media (max-width: 768px) {
+  .quick-actions .prompt-select {
+    width: 160px;
+  }
 }
 
 /* 对话区（AI 助手风格）：卡片 body 内 flex 自适应 */
