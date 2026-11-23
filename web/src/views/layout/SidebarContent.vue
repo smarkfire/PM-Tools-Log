@@ -28,7 +28,7 @@
         <template #title>填写日志</template>
       </el-menu-item>
 
-      <el-menu-item index="/logs/write-v2">
+      <el-menu-item v-if="menus.logsWriteV2 !== false" index="/logs/write-v2">
         <el-icon><MagicStick /></el-icon>
         <template #title>填写日志·新版</template>
       </el-menu-item>
@@ -43,7 +43,7 @@
         <template #title>我的日志·新版</template>
       </el-menu-item>
 
-      <el-menu-item index="/todos">
+      <el-menu-item v-if="menus.todoHistory !== false" index="/todos">
         <el-icon><List /></el-icon>
         <template #title>历史待办</template>
       </el-menu-item>

@@ -11,9 +11,11 @@ interface ConfigState {
 
 const DEFAULT_MENUS: MenuVisibility = {
   logsWrite: true,
+  logsWriteV2: true,
   logs: true,
   logsAll: true,
   logsMyV2: true,
+  todoHistory: true,
   projects: true,
   reports: true,
   chat: true,

@@ -448,10 +448,14 @@ export const aiConfigApi = {
 // ==================== 菜单可见性 ====================
 export interface MenuVisibility {
   logsWrite: boolean;
+  /** 填写日志·新版（对话式填报） */
+  logsWriteV2?: boolean;
   logs: boolean;
   logsAll: boolean;
   /** 我的日志·新版（对话式填报产生的日志列表） */
   logsMyV2?: boolean;
+  /** 历史待办 */
+  todoHistory?: boolean;
   projects: boolean;
   reports: boolean;
   chat: boolean;

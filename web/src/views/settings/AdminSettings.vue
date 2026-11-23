@@ -332,8 +332,10 @@ const ROLE_OPTIONS = [
 const ROLE_MENU_ITEMS = [
   { key: 'dashboard', label: '工作台' },
   { key: 'logsWrite', label: '填写日志' },
+  { key: 'logsWriteV2', label: '填写日志·新版' },
   { key: 'logs', label: '我的日志' },
   { key: 'logsMyV2', label: '我的日志·新版' },
+  { key: 'todoHistory', label: '历史待办' },
   { key: 'logsAll', label: '团队日志' },
   { key: 'projects', label: '项目管理' },
   { key: 'reports', label: '报告中心' },
