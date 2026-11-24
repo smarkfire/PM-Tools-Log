@@ -420,7 +420,7 @@ const SYSTEM_PROMPT_SEEDS: { type: string; name: string; content: string }[] = [
 - 开发测试工作：{具体对象 + 具体动作 + 成果/数据}
 - 用户验证工作：{具体对象 + 具体动作 + 成果/数据}
 - 数据接入和治理工作：{具体对象 + 具体动作 + 成果/数据}
-- 智慧化工配套改造：{具体对象 + 具体动作 + 成果/数据}
+- 配套改造：{具体对象 + 具体动作 + 成果/数据}
 - 其他工作：{具体对象 + 具体动作 + 成果/数据}
 （每类工作无相关内容写"不涉及"；有多条时本行写"{类别}："，下一行起逐条编号；同一天涉及多个小组时，必须重复"### 小组名称：{小组名称}"段，每个三级标题下只能有1个小组名称；无小组信息则不写三级标题，直接按七类固定顺序列出事项）
 ## 明日计划
@@ -431,10 +431,10 @@ const SYSTEM_PROMPT_SEEDS: { type: string; name: string; content: string }[] = [
 ];
 
 /** 系统提示词种子版本：仅当版本号变化时才刷新规范类提示词，避免覆盖管理员在页面上的修改 */
-const SYSTEM_PROMPT_SEED_VERSION = '2026-11-23-1';
+const SYSTEM_PROMPT_SEED_VERSION = '2026-11-24-1';
 
 /** 随版本演进、需要按种子更新的系统提示词类型 */
-const EVOLVING_PROMPT_TYPES = ['log_optimize', 'log_review', 'report'];
+const EVOLVING_PROMPT_TYPES = ['log_optimize', 'log_review', 'report', 'log_template'];
 
 /** 管理员手工定制标记的配置键前缀（标记存在时该类型不再被种子覆盖） */
 const PROMPT_CUSTOMIZED_KEY_PREFIX = 'sp_customized_';
