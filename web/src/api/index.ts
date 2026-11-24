@@ -336,6 +336,9 @@ export const promptApi = {
   update: (id: number, data: { name?: string; content?: string; isDefault?: boolean }) =>
     request.put(`/prompts/${id}`, data),
   remove: (id: number) => request.delete(`/prompts/${id}`),
+  /** 更新系统默认提示词（仅系统管理员） */
+  updateSystemPrompt: (id: number, data: { name?: string; content: string }) =>
+    request.put<SystemPrompt>(`/system-prompts/${id}`, data),
 };
 
 // ==================== AI 对话 ====================

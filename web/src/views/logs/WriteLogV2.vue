@@ -13,22 +13,7 @@
                 标准：别人不看代码、不开会，也能知道你这天<strong>干了什么、干到什么程度、明天从哪继续</strong>。AI 按此规范检查并打分（满分 100），<strong>达到 80 分</strong>才能生成定稿。
               </p>
               <p class="tips-structure-title">标准日志模板（Markdown 层级）：</p>
-              <pre class="tips-template"># 2026-11-07 张三 的日志
-## 项目名称：{项目名称}
-- 投入时长：X小时
-### 小组名称：{小组名称}
-- 需求工作：{具体对象 + 具体动作 + 成果/数据}
-- 设计工作：{具体对象 + 具体动作 + 成果/数据}
-- 开发测试工作：{具体对象 + 具体动作 + 成果/数据}
-- 用户验证工作：{具体对象 + 具体动作 + 成果/数据}
-- 数据接入和治理工作：{具体对象 + 具体动作 + 成果/数据}
-- 配套改造：{具体对象 + 具体动作 + 成果/数据}
-- 其他工作：{具体对象 + 具体动作 + 成果/数据}
-（每类工作无相关内容写"不涉及"；有多条时本行写"{类别}："，下一行起逐条编号；同一天涉及多个小组时，必须重复"### 小组名称：{小组名称}"段，每个三级标题下只能有1个小组名称；无小组信息则不写三级标题，直接按七类固定顺序列出事项）
-## 明日计划
-- {后续工作安排}
-## 问题与风险
-- {卡点或需要的协助，如实写"无"也可以}</pre>
+              <pre class="tips-template">{{ logTemplate }}</pre>
               <ol>
                 <li><strong>一级标题</strong>：谁的哪天的日志</li>
                 <li><strong>二级标题</strong>："项目名称：xxx"（下写当天总投入时长）、明日计划、问题与风险</li>
@@ -383,10 +368,17 @@ import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { chatApi, logApi, projectApi, promptApi, todoApi, type TodoItem } from '../../api';
 import { currentWeekMonday } from '../../utils/date';
+import { DEFAULT_LOG_TEMPLATE, loadLogTemplate } from '../../utils/logTemplate';
 import MdPreview from '../../components/MdPreview.vue';
 import type { UserPrompt } from '../../types';
 
 const router = useRouter();
+
+// 标准日志示例：由提示词配置页维护，加载失败时回退内置默认
+const logTemplate = ref(DEFAULT_LOG_TEMPLATE);
+onMounted(async () => {
+  logTemplate.value = await loadLogTemplate();
+});
 
 const todos = ref<TodoItem[]>([]);
 const newTodoText = ref('');

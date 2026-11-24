@@ -66,6 +66,8 @@ router.get('/prompts', authMiddleware, wrap(promptController.listPrompts));
 router.post('/prompts', authMiddleware, wrap(promptController.createPrompt));
 router.put('/prompts/:id', authMiddleware, wrap(promptController.updatePrompt));
 router.delete('/prompts/:id', authMiddleware, wrap(promptController.deletePrompt));
+// 系统默认提示词（仅系统管理员可改；控制器内从数据库校验角色）
+router.put('/system-prompts/:id', authMiddleware, wrap(promptController.updateSystemPrompt));
 
 // ==================== AI 对话 ====================
 router.get('/chat/providers', authMiddleware, wrap(chatController.getProviders));

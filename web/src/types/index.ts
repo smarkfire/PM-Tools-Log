@@ -124,7 +124,7 @@ export interface UserPrompt {
 /** 系统默认提示词（用户无自定义时使用） */
 export interface SystemPrompt {
   id: number;
-  type: 'log_optimize' | 'report' | 'chat';
+  type: 'log_optimize' | 'log_review' | 'report' | 'chat' | 'log_template';
   name: string;
   content: string;
 }

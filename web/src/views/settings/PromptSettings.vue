@@ -12,7 +12,7 @@
           <template #header>
             <div class="card-header-row">
               <span>我的提示词</span>
-              <el-button type="primary" size="small" @click="showCreate">
+              <el-button v-if="canCreate" type="primary" size="small" @click="showCreate">
                 <el-icon><Plus /></el-icon>新建
               </el-button>
             </div>
@@ -20,17 +20,17 @@
 
           <el-tabs v-model="activeType" @tab-change="loadPrompts">
             <el-tab-pane label="日志优化" name="log_optimize" />
+            <el-tab-pane label="日志质量检查" name="log_review" />
             <el-tab-pane label="报告生成" name="report" />
             <el-tab-pane label="AI 对话" name="chat" />
+            <el-tab-pane label="标准日志示例" name="log_template" />
           </el-tabs>
 
-          <!-- 系统默认提示词（只读，未自定义默认时生效） -->
+          <!-- 系统默认提示词（系统管理员可编辑；其他角色只读） -->
           <div v-if="systemPrompt" class="prompt-item system-prompt" :class="{ active: selectedSystem }" @click="selectSystemPrompt">
             <div class="prompt-item-header">
               <span class="prompt-name">{{ systemPrompt.name }}</span>
-              <el-tag :type="hasCustomDefault ? 'info' : 'success'" size="small">
-                {{ hasCustomDefault ? '备用' : '当前生效' }}
-              </el-tag>
+              <el-tag :type="systemTagType" size="small">{{ systemTagText }}</el-tag>
             </div>
             <div class="prompt-preview">{{ systemPrompt.content.slice(0, 60) }}...</div>
           </div>
@@ -52,7 +52,11 @@
               <div class="prompt-preview">{{ p.content.slice(0, 60) }}...</div>
             </div>
           </div>
-          <el-empty v-else description="暂无提示词，点击右上角新建" :image-size="60" />
+          <el-empty
+            v-else
+            :description="canCreate ? '暂无提示词，点击右上角新建' : '该场景仅支持系统默认提示词'"
+            :image-size="60"
+          />
         </el-card>
       </el-col>
 
@@ -69,13 +73,13 @@
               type="info"
               :closable="false"
               show-icon
-              title="系统默认提示词（只读）"
-              description="未设置自定义默认提示词时使用。可新建自己的提示词并设为默认来覆盖。"
+              :title="systemAlertTitle"
+              :description="systemAlertDesc"
               style="margin-bottom: 16px"
             />
             <el-form label-position="top">
               <el-form-item label="提示词名称">
-                <el-input v-model="selectedPrompt.name" :disabled="!editingPrompt || selectedSystem" maxlength="100" />
+                <el-input v-model="selectedPrompt.name" :disabled="!canEditSelected" maxlength="100" />
               </el-form-item>
               <el-form-item>
                 <template #label>
@@ -88,12 +92,12 @@
                   v-model="selectedPrompt.content"
                   type="textarea"
                   :rows="14"
-                  :disabled="!editingPrompt || selectedSystem"
-                  maxlength="5000"
+                  :disabled="!canEditSelected"
+                  :maxlength="selectedSystem ? 20000 : 5000"
                   show-word-limit
                 />
               </el-form-item>
-              <el-form-item v-if="editingPrompt">
+              <el-form-item v-if="editingPrompt && !selectedSystem">
                 <el-checkbox v-model="selectedPrompt.is_default">设为该场景默认提示词</el-checkbox>
               </el-form-item>
             </el-form>
@@ -113,7 +117,21 @@
               </template>
             </div>
             <div class="edit-actions" v-else>
-              <el-button type="primary" plain @click="copySystemPrompt">
+              <template v-if="isSystemAdmin">
+                <template v-if="!editingSystem">
+                  <el-button type="primary" @click="editingSystem = true">
+                    <el-icon><Edit /></el-icon>编辑
+                  </el-button>
+                  <el-button type="primary" plain @click="copySystemPrompt">
+                    <el-icon><CopyDocument /></el-icon>复制内容
+                  </el-button>
+                </template>
+                <template v-else>
+                  <el-button type="primary" :loading="savingSystem" @click="handleSaveSystemPrompt">保存</el-button>
+                  <el-button @click="cancelSystemEdit">取消</el-button>
+                </template>
+              </template>
+              <el-button v-else type="primary" plain @click="copySystemPrompt">
                 <el-icon><CopyDocument /></el-icon>复制内容
               </el-button>
             </div>
@@ -164,19 +182,52 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { promptApi } from '../../api';
 import { useAppStore } from '../../stores/app';
+import { useUserStore } from '../../stores/user';
 import type { UserPrompt, SystemPrompt } from '../../types';
 
 const appStore = useAppStore();
+const userStore = useUserStore();
 const isMobile = computed(() => appStore.isMobile);
+const isSystemAdmin = computed(() => userStore.isSystemAdmin);
 
-const activeType = ref<'log_optimize' | 'report' | 'chat'>('log_optimize');
+const activeType = ref<'log_optimize' | 'log_review' | 'report' | 'chat' | 'log_template'>('log_optimize');
 const prompts = ref<UserPrompt[]>([]);
 const systemPrompt = ref<SystemPrompt | null>(null);
 const hasCustomDefault = ref(false);
 const selectedSystem = ref(false);
 const selectedPrompt = ref<UserPrompt | null>(null);
 const editingPrompt = ref(false);
+const editingSystem = ref(false);
 const saving = ref(false);
+const savingSystem = ref(false);
+
+/** 支持自建提示词的场景（log_review / log_template 仅系统项） */
+const CREATE_TYPES = ['log_optimize', 'report', 'chat'];
+const canCreate = computed(() => CREATE_TYPES.includes(activeType.value));
+/** 当前是否允许编辑表单：普通提示词看编辑态；系统提示词需系统管理员且处于编辑态 */
+const canEditSelected = computed(() =>
+  selectedSystem.value ? isSystemAdmin.value && editingSystem.value : editingPrompt.value
+);
+const systemTagText = computed(() => {
+  if (activeType.value === 'log_template') return '页面展示';
+  return hasCustomDefault.value ? '备用' : '当前生效';
+});
+const systemTagType = computed<'success' | 'info'>(() =>
+  activeType.value === 'log_template' || hasCustomDefault.value ? 'info' : 'success'
+);
+const systemAlertTitle = computed(() =>
+  isSystemAdmin.value ? '系统默认提示词（系统管理员可编辑）' : '系统默认提示词（只读）'
+);
+const systemAlertDesc = computed(() => {
+  if (isSystemAdmin.value) {
+    return activeType.value === 'log_template'
+      ? '此处内容展示在日志填报页的气泡中，保存后立即生效。'
+      : '保存后立即生效；后续启动不会被种子数据覆盖。';
+  }
+  return activeType.value === 'log_template'
+    ? '此处内容由系统管理员维护；未配置时使用前端内置默认模板。'
+    : '未设置自定义默认提示词时使用。可新建自己的提示词并设为默认来覆盖。';
+});
 
 const createVisible = ref(false);
 const creating = ref(false);
@@ -192,6 +243,7 @@ async function loadPrompts() {
   prompts.value = res.data?.prompts || [];
   systemPrompt.value = res.data?.systemPrompts?.[0] || null;
   hasCustomDefault.value = !!res.data?.hasCustomDefault;
+  editingSystem.value = false;
   if (selectedSystem.value) {
     // 保持选中系统提示词
     selectedPrompt.value = systemPrompt.value ? { ...systemPrompt.value, user_id: 0, is_default: false, created_at: '', updated_at: '' } as any : null;
@@ -205,13 +257,55 @@ function selectPrompt(p: UserPrompt) {
   selectedSystem.value = false;
   selectedPrompt.value = { ...p };
   editingPrompt.value = false;
+  editingSystem.value = false;
 }
 
 function selectSystemPrompt() {
   if (!systemPrompt.value) return;
   selectedSystem.value = true;
   editingPrompt.value = false;
+  editingSystem.value = false;
   selectedPrompt.value = { ...systemPrompt.value, user_id: 0, is_default: false, created_at: '', updated_at: '' } as any;
+}
+
+/** 取消编辑系统提示词：还原为服务端当前内容 */
+function cancelSystemEdit() {
+  if (!systemPrompt.value) return;
+  selectedPrompt.value = { ...systemPrompt.value, user_id: 0, is_default: false, created_at: '', updated_at: '' } as any;
+  editingSystem.value = false;
+}
+
+/** 保存系统提示词（仅系统管理员；后端会再次校验角色） */
+async function handleSaveSystemPrompt() {
+  if (!systemPrompt.value || !selectedPrompt.value) return;
+  if (!selectedPrompt.value.name.trim() || !selectedPrompt.value.content.trim()) {
+    ElMessage.warning('提示词名称和内容不能为空');
+    return;
+  }
+  savingSystem.value = true;
+  try {
+    const res = await promptApi.updateSystemPrompt(systemPrompt.value.id, {
+      name: selectedPrompt.value.name.trim(),
+      content: selectedPrompt.value.content.trim(),
+    });
+    systemPrompt.value = {
+      id: res.data.id,
+      type: res.data.type,
+      name: res.data.name,
+      content: res.data.content,
+    };
+    selectedPrompt.value = {
+      ...systemPrompt.value,
+      user_id: 0,
+      is_default: false,
+      created_at: '',
+      updated_at: '',
+    } as any;
+    editingSystem.value = false;
+    ElMessage.success('系统提示词已保存');
+  } finally {
+    savingSystem.value = false;
+  }
 }
 
 async function copySystemPrompt() {
@@ -234,6 +328,7 @@ function cancelEdit() {
 }
 
 function showCreate() {
+  if (!canCreate.value) return;
   createForm.type = activeType.value;
   createForm.name = '';
   createForm.content = '';

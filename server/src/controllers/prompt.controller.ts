@@ -5,8 +5,14 @@
 import { Request, Response } from 'express';
 import { queryMany, queryOne } from '../config/db';
 import { success, fail } from '../utils/response';
+import { setConfig } from '../services/config.service';
 
-const VALID_TYPES = ['log_optimize', 'report', 'chat'];
+/** 普通用户可自建提示词的类型 */
+const USER_PROMPT_TYPES = ['log_optimize', 'report', 'chat'];
+/** 系统默认提示词类型（log_review 仅系统项；log_template 仅用于填报页气泡展示） */
+const SYSTEM_PROMPT_TYPES = ['log_optimize', 'log_review', 'report', 'chat', 'log_template'];
+/** 管理员手工定制标记前缀（与 initDb 保持一致，存在时不再被种子覆盖） */
+const PROMPT_CUSTOMIZED_KEY_PREFIX = 'sp_customized_';
 
 /**
  * 获取当前用户的提示词列表（附系统默认提示词）
@@ -18,7 +24,7 @@ export async function listPrompts(req: Request, res: Response) {
   const params: any[] = [userId];
   let sql = 'SELECT * FROM user_prompts WHERE user_id = $1';
   if (type) {
-    if (!VALID_TYPES.includes(type as string)) {
+    if (!SYSTEM_PROMPT_TYPES.includes(type as string)) {
       res.status(400).json(fail('无效的提示词类型'));
       return;
     }
@@ -49,7 +55,7 @@ export async function listPrompts(req: Request, res: Response) {
 export async function createPrompt(req: Request, res: Response) {
   const userId = req.authUser!.id;
   const { type, name, content, isDefault } = req.body || {};
-  if (!VALID_TYPES.includes(type)) {
+  if (!USER_PROMPT_TYPES.includes(type)) {
     res.status(400).json(fail('无效的提示词类型'));
     return;
   }
@@ -120,4 +126,70 @@ export async function deletePrompt(req: Request, res: Response) {
   }
   await queryOne('DELETE FROM user_prompts WHERE id = $1', [promptId, userId]);
   res.json(success(null, '提示词已删除'));
+}
+
+// ==================== 系统默认提示词（仅系统管理员可改） ====================
+
+/** 仅系统管理员（role = 'admin'）可修改系统默认提示词；项目总监等角色不可修改 */
+async function requireSystemAdmin(req: Request, res: Response): Promise<boolean> {
+  const user = await queryOne<{ role: string }>('SELECT role FROM users WHERE id = $1', [
+    req.authUser!.id,
+  ]);
+  if (!user || user.role !== 'admin') {
+    res.status(403).json(fail('无权限：仅系统管理员可修改系统默认提示词', 403));
+    return false;
+  }
+  return true;
+}
+
+/**
+ * 更新系统默认提示词
+ * PUT /api/system-prompts/:id
+ * body: { name?, content }
+ * 保存后写入 sp_customized_<type> 标记，避免后续启动被种子覆盖
+ */
+export async function updateSystemPrompt(req: Request, res: Response) {
+  if (!(await requireSystemAdmin(req, res))) return;
+
+  const promptId = parseInt(req.params.id, 10);
+  if (!Number.isInteger(promptId)) {
+    res.status(400).json(fail('无效的提示词 ID'));
+    return;
+  }
+
+  const { name, content } = req.body || {};
+  if (typeof content !== 'string' || !content.trim()) {
+    res.status(400).json(fail('提示词内容不能为空'));
+    return;
+  }
+  if (name !== undefined && (typeof name !== 'string' || !name.trim())) {
+    res.status(400).json(fail('提示词名称不能为空'));
+    return;
+  }
+
+  const existing = await queryOne<{ id: number; type: string }>(
+    'SELECT id, type FROM system_prompts WHERE id = $1',
+    [promptId]
+  );
+  if (!existing) {
+    res.status(404).json(fail('系统提示词不存在'));
+    return;
+  }
+  if (!SYSTEM_PROMPT_TYPES.includes(existing.type)) {
+    res.status(400).json(fail('该类型不支持在页面修改'));
+    return;
+  }
+
+  const updated = await queryOne(
+    `UPDATE system_prompts
+     SET name = COALESCE($1, name), content = $2
+     WHERE id = $3
+     RETURNING id, type, name, content`,
+    [typeof name === 'string' ? name.trim() : null, content.trim(), promptId]
+  );
+
+  // 标记该类型已被管理员定制，initDb 后续不再用种子覆盖
+  await setConfig(`${PROMPT_CUSTOMIZED_KEY_PREFIX}${existing.type}`, '1');
+
+  res.json(success(updated, '系统提示词已更新'));
 }

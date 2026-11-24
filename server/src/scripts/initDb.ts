@@ -407,7 +407,37 @@ const SYSTEM_PROMPT_SEEDS: { type: string; name: string; content: string }[] = [
 {"action":"done","score":85,"summary":"检查结论一句话","questions":[],"result":{"projects":["识别出的项目名称"],"content":"按规范结构生成的完整 Markdown 日志正文","hours":8,"groups":[{"name":"小组名"}]}}
 说明：score 为 0~100 的整数，保存进日志作为质检得分。result.content 用 \\n 表示换行；result.projects 为日志中出现的全部项目名称列表（可能与【参与的项目与小组】清单逐一核对，完全一致，不使用别名简写；无项目信息时为空数组）；hours 为当天在各项目的总投入工时（数字）；groups 为日志中涉及的小组名称列表（同样与清单核对，无小组时为空数组）。`,
   },
+  {
+    // 仅用于日志填报页气泡展示，不参与 AI 调用
+    type: 'log_template',
+    name: '系统默认-标准日志示例',
+    content: `# 2026-11-07 张三 的日志
+## 项目名称：{项目名称}
+- 投入时长：X小时
+### 小组名称：{小组名称}
+- 需求工作：{具体对象 + 具体动作 + 成果/数据}
+- 设计工作：{具体对象 + 具体动作 + 成果/数据}
+- 开发测试工作：{具体对象 + 具体动作 + 成果/数据}
+- 用户验证工作：{具体对象 + 具体动作 + 成果/数据}
+- 数据接入和治理工作：{具体对象 + 具体动作 + 成果/数据}
+- 智慧化工配套改造：{具体对象 + 具体动作 + 成果/数据}
+- 其他工作：{具体对象 + 具体动作 + 成果/数据}
+（每类工作无相关内容写"不涉及"；有多条时本行写"{类别}："，下一行起逐条编号；同一天涉及多个小组时，必须重复"### 小组名称：{小组名称}"段，每个三级标题下只能有1个小组名称；无小组信息则不写三级标题，直接按七类固定顺序列出事项）
+## 明日计划
+- {后续工作安排}
+## 问题与风险
+- {卡点或需要的协助，如实写"无"也可以}`,
+  },
 ];
+
+/** 系统提示词种子版本：仅当版本号变化时才刷新规范类提示词，避免覆盖管理员在页面上的修改 */
+const SYSTEM_PROMPT_SEED_VERSION = '2026-11-23-1';
+
+/** 随版本演进、需要按种子更新的系统提示词类型 */
+const EVOLVING_PROMPT_TYPES = ['log_optimize', 'log_review', 'report'];
+
+/** 管理员手工定制标记的配置键前缀（标记存在时该类型不再被种子覆盖） */
+const PROMPT_CUSTOMIZED_KEY_PREFIX = 'sp_customized_';
 
 /** 系统配置种子数据 */
 const CONFIG_SEEDS: { key: string; value: string; desc: string }[] = [
@@ -680,20 +710,28 @@ async function initDb() {
   console.log('所有表创建完成');
 
   // 种子数据（幂等插入，显式类型转换避免参数类型推导不一致）
-  // log_optimize / log_review / report 为随版本演进的规范类提示词：已存在则更新为最新内容（不覆盖用户自建提示词）
+  // log_optimize / log_review / report 为随版本演进的规范类提示词：
+  // - 仅在种子版本变化时才更新，避免每次启动覆盖系统管理员在页面上的修改；
+  // - 管理员手工修改过的类型（sp_customized_* 标记）即使版本变化也不再覆盖；
+  // - 不覆盖用户自建提示词（user_prompts）
+  const seedVersionRow = await query<{ config_value: string | null }>(
+    `SELECT config_value FROM system_config WHERE config_key = 'system_prompt_seed_version'`
+  );
+  const needSeedUpdate =
+    (seedVersionRow.rows[0]?.config_value ?? '') !== SYSTEM_PROMPT_SEED_VERSION;
+
   for (const p of SYSTEM_PROMPT_SEEDS) {
-    if (p.type === 'log_optimize' || p.type === 'log_review' || p.type === 'report') {
-      await query(
-        `UPDATE system_prompts SET name = $1::varchar, content = $2::text WHERE type = $3::varchar`,
-        [p.name, p.content, p.type]
+    if (needSeedUpdate && EVOLVING_PROMPT_TYPES.includes(p.type)) {
+      const customizedRow = await query<{ config_value: string | null }>(
+        `SELECT config_value FROM system_config WHERE config_key = $1`,
+        [`${PROMPT_CUSTOMIZED_KEY_PREFIX}${p.type}`]
       );
-      await query(
-        `INSERT INTO system_prompts (type, name, content)
-         SELECT $1::varchar, $2::varchar, $3::text
-         WHERE NOT EXISTS (SELECT 1 FROM system_prompts WHERE type = $1::varchar)`,
-        [p.type, p.name, p.content]
-      );
-      continue;
+      if (!customizedRow.rows[0]?.config_value) {
+        await query(
+          `UPDATE system_prompts SET name = $1::varchar, content = $2::text WHERE type = $3::varchar`,
+          [p.name, p.content, p.type]
+        );
+      }
     }
     await query(
       `INSERT INTO system_prompts (type, name, content)
@@ -702,7 +740,18 @@ async function initDb() {
       [p.type, p.name, p.content]
     );
   }
-  console.log(`系统默认提示词已初始化（${SYSTEM_PROMPT_SEEDS.length} 条）`);
+
+  if (needSeedUpdate) {
+    await query(
+      `INSERT INTO system_config (config_key, config_value, description)
+       VALUES ('system_prompt_seed_version', $1::text, '系统提示词种子版本')
+       ON CONFLICT (config_key) DO UPDATE SET config_value = $1::text, updated_at = NOW()`,
+      [SYSTEM_PROMPT_SEED_VERSION]
+    );
+  }
+  console.log(
+    `系统默认提示词已初始化（${SYSTEM_PROMPT_SEEDS.length} 条，种子${needSeedUpdate ? '已刷新' : '未变更'}）`
+  );
 
   for (const c of CONFIG_SEEDS) {
     await query(
